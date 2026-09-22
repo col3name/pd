@@ -81,7 +81,8 @@ func TestTokenizerEncode(t *testing.T) {
 	require.Equal(t, "иван", tokens[1].Text)
 	require.Equal(t, 0, tokens[1].Start)
 	require.Equal(t, "иванов", tokens[2].Text)
-	require.Equal(t, 5, tokens[2].Start)
+	// "Иван" = 4 Cyrillic chars × 2 bytes = 8 bytes, + 1 space = 9.
+	require.Equal(t, 9, tokens[2].Start)
 	require.Equal(t, "[SEP]", tokens[3].Text)
 }
 
@@ -311,7 +312,8 @@ func TestSpansFromLabels(t *testing.T) {
 	require.Len(t, spans, 1)
 	require.Equal(t, detector.TypeFIO, spans[0].Type)
 	require.Equal(t, 0, spans[0].Start)
-	require.Equal(t, 11, spans[0].End) // "Иван Иванов" = 5 + 1 + 5 = 11 bytes
+	// "Иван Иванов" = 4×2 + 1 + 6×2 = 21 bytes.
+	require.Equal(t, 21, spans[0].End)
 }
 ```
 
