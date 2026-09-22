@@ -127,6 +127,40 @@ func TestDetectSemanticAddress(t *testing.T) {
 	require.True(t, found, "expected address in %q, got %v", "адрес клиента: г. Москва, ул. Ленина, д. 10", spans)
 }
 
+type mockNER struct {
+	spans  []Span
+	called bool
+}
+
+func (m *mockNER) Detect(text string) []Span {
+	m.called = true
+	return m.spans
+}
+
+func TestDetectSmartPathNoSpans(t *testing.T) {
+	// No rule-based spans → NER is called and its spans merged.
+	ner := &mockNER{spans: []Span{
+		{Start: 0, End: 11, Type: TypeFIO, Confidence: 0.9},
+	}}
+	d := New(StructuredRules(), WithNER(ner))
+	spans := d.Detect("Иван Иванов")
+	require.Len(t, spans, 1)
+	require.Equal(t, TypeFIO, spans[0].Type)
+	require.True(t, ner.called, "NER should be called when no rule-based spans")
+}
+
+func TestDetectSmartPathHighConfidenceSkipsNER(t *testing.T) {
+	// High-confidence rule-based span → NER NOT called.
+	ner := &mockNER{spans: []Span{
+		{Start: 0, End: 11, Type: TypeFIO, Confidence: 0.9},
+	}}
+	d := New(StructuredRules(), WithNER(ner))
+	spans := d.Detect("паспорт 4509 123456")
+	require.Len(t, spans, 1)
+	require.Equal(t, TypePassport, spans[0].Type)
+	require.False(t, ner.called, "NER should NOT be called for high-confidence spans")
+}
+
 func TestDetectOtherDocuments(t *testing.T) {
 	d := New(StructuredRules())
 	cases := []struct {

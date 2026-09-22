@@ -7,14 +7,32 @@ import (
 	"sync"
 )
 
+// NERDetector is an optional ML NER model used in the smart path.
+type NERDetector interface {
+	Detect(text string) []Span
+}
+
 // Detector scans text for personal-data spans.
 type Detector struct {
 	rules []Rule
+	ner   NERDetector
 }
 
-// New returns a Detector using the given rules.
-func New(rules []Rule) *Detector {
-	return &Detector{rules: rules}
+// Option configures a Detector.
+type Option func(*Detector)
+
+// WithNER sets the optional NER model for the smart path.
+func WithNER(n NERDetector) Option {
+	return func(d *Detector) { d.ner = n }
+}
+
+// New returns a Detector using the given rules and options.
+func New(rules []Rule, opts ...Option) *Detector {
+	d := &Detector{rules: rules}
+	for _, o := range opts {
+		o(d)
+	}
+	return d
 }
 
 // Detect returns resolved, non-overlapping PII spans in text.
@@ -23,11 +41,36 @@ func (d *Detector) Detect(text string) []Span {
 	if len(d.rules) == 0 {
 		return nil
 	}
+	var spans []Span
 	// For short inputs, sequential is faster (no goroutine overhead).
 	if len(text) < 4096 {
-		return d.detectSequential(text)
+		spans = d.detectSequential(text)
+	} else {
+		spans = d.detectParallel(text)
 	}
-	return d.detectParallel(text)
+	return d.smartPath(text, spans)
+}
+
+// smartPath runs the NER model when rule-based detection is ambiguous
+// (mid-confidence spans or no spans) and merges the results.
+func (d *Detector) smartPath(text string, spans []Span) []Span {
+	if d.ner == nil {
+		return spans
+	}
+	ambiguous := len(spans) == 0
+	if !ambiguous {
+		for _, s := range spans {
+			if s.Confidence >= 0.75 && s.Confidence < 0.95 {
+				ambiguous = true
+				break
+			}
+		}
+	}
+	if !ambiguous {
+		return spans
+	}
+	nerSpans := d.ner.Detect(text)
+	return ResolveOverlaps(append(spans, nerSpans...))
 }
 
 func (d *Detector) detectSequential(text string) []Span {
