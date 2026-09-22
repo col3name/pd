@@ -24,7 +24,7 @@ var cities = map[string]bool{
 }
 
 // surnameSuffixes are common Russian surname endings.
-var surnameSuffixes = []string{"ова", "ева", "ина", "ская", "цкая", "ов", "ев", "ин", "ский", "цкий", "ко", "чук", "енко"}
+var surnameSuffixes = []string{"ова", "ева", "ина", "ская", "цкая", "ов", "ев", "ин", "ский", "цкий", "ко", "чук", "енко", "ич", "ович", "евич", "вна", "овна", "евна"}
 
 // isSurname reports whether word looks like a Russian surname.
 func isSurname(word string) bool {

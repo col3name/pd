@@ -46,6 +46,9 @@ func TestDetectFIO(t *testing.T) {
 	require.Len(t, spans, 1)
 	require.Equal(t, TypeFIO, spans[0].Type)
 	require.GreaterOrEqual(t, spans[0].Confidence, float32(0.95))
+	// Span must cover the full FIO "Иванов Иван Иванович" (bytes [13, 51)).
+	require.Equal(t, 13, spans[0].Start)
+	require.Equal(t, 51, spans[0].End)
 
 	// Name without context → low confidence (0.8), still returned.
 	spans = detectFIO("Александр Пушкин написал")
