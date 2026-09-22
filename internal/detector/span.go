@@ -4,10 +4,11 @@ import "sort"
 
 // Span is a detected personal-data region in the source text.
 type Span struct {
-	Start    int
-	End      int
-	Type     Type
-	Priority int
+	Start      int
+	End        int
+	Type       Type
+	Priority   int
+	Confidence float32
 }
 
 // Len returns the span length in bytes.

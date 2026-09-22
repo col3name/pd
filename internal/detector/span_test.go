@@ -38,6 +38,11 @@ func TestResolveOverlapsSameLengthEarliest(t *testing.T) {
 	require.Equal(t, TypeEmail, got[0].Type)
 }
 
+func TestSpanConfidenceField(t *testing.T) {
+	s := Span{Start: 0, End: 5, Type: TypeEmail, Confidence: 0.98}
+	require.Equal(t, float32(0.98), s.Confidence)
+}
+
 func TestResolveOverlapsSameLengthPriority(t *testing.T) {
 	// Identical spans: passport and driver license both match "4509 123456".
 	// Higher priority (passport) must win over earliest start.
