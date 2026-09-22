@@ -101,6 +101,32 @@ func TestDetectDateFormats(t *testing.T) {
 	}
 }
 
+func TestDetectSemanticFIO(t *testing.T) {
+	d := New(StructuredRules())
+	spans := d.Detect("Клиент Иванов Иван Иванович")
+	found := false
+	for _, s := range spans {
+		if s.Type == TypeFIO {
+			found = true
+			require.GreaterOrEqual(t, s.Confidence, float32(0.95))
+		}
+	}
+	require.True(t, found, "expected FIO in %q, got %v", "Клиент Иванов Иван Иванович", spans)
+}
+
+func TestDetectSemanticAddress(t *testing.T) {
+	d := New(StructuredRules())
+	spans := d.Detect("адрес клиента: г. Москва, ул. Ленина, д. 10")
+	found := false
+	for _, s := range spans {
+		if s.Type == TypeAddress {
+			found = true
+			require.GreaterOrEqual(t, s.Confidence, float32(0.95))
+		}
+	}
+	require.True(t, found, "expected address in %q, got %v", "адрес клиента: г. Москва, ул. Ленина, д. 10", spans)
+}
+
 func TestDetectOtherDocuments(t *testing.T) {
 	d := New(StructuredRules())
 	cases := []struct {

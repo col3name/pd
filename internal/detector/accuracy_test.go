@@ -13,7 +13,7 @@ var accuracyCases = []struct {
 	positive []Type
 	negative []Type
 }{
-	{"Клиент Иванов Иван Иванович, паспорт 4509 123456", []Type{TypePassport}, []Type{TypeFIO}},
+	{"Клиент Иванов Иван Иванович, паспорт 4509 123456", []Type{TypePassport, TypeFIO}, nil},
 	{"email test@example.com", []Type{TypeEmail}, nil},
 	{"телефон +7 912 345-67-89", []Type{TypePhone}, nil},
 	{"ИНН 7707083893", []Type{TypeINN}, nil},

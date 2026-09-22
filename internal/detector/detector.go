@@ -35,7 +35,7 @@ func (d *Detector) detectSequential(text string) []Span {
 	for _, r := range d.rules {
 		spans = append(spans, ruleSpans(text, r)...)
 	}
-	return ResolveOverlaps(spans)
+	return resolveAll(text, spans)
 }
 
 func (d *Detector) detectParallel(text string) []Span {
@@ -60,6 +60,13 @@ func (d *Detector) detectParallel(text string) []Span {
 	for _, rs := range results {
 		spans = append(spans, rs...)
 	}
+	return resolveAll(text, spans)
+}
+
+// resolveAll appends semantic spans and resolves overlaps.
+func resolveAll(text string, spans []Span) []Span {
+	spans = append(spans, detectFIO(text)...)
+	spans = append(spans, detectAddress(text)...)
 	return ResolveOverlaps(spans)
 }
 
