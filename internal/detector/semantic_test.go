@@ -66,6 +66,9 @@ func TestDetectAddress(t *testing.T) {
 	require.Len(t, spans, 1)
 	require.Equal(t, TypeAddress, spans[0].Type)
 	require.GreaterOrEqual(t, spans[0].Confidence, float32(0.95))
+	// Span must cover the full address "Москва, ул. Ленина, д. 10" (bytes [31, 71)).
+	require.Equal(t, 31, spans[0].Start)
+	require.Equal(t, 71, spans[0].End)
 
 	// Bank address with negative context → low confidence.
 	spans = detectAddress("Банк находится по адресу Москва, ул. Тверская, 10")
@@ -75,4 +78,21 @@ func TestDetectAddress(t *testing.T) {
 	// No city/street → no span.
 	spans = detectAddress("обычный текст")
 	require.Empty(t, spans)
+}
+
+func TestDetectAddressNotFIO(t *testing.T) {
+	// A street name inside an address must be masked as АДРЕС, not ФИО.
+	d := New(StructuredRules())
+	spans := d.Detect("адрес клиента: г. Москва, ул. Ленина, д. 10")
+	var hasAddress, hasFIO bool
+	for _, s := range spans {
+		switch s.Type {
+		case TypeAddress:
+			hasAddress = true
+		case TypeFIO:
+			hasFIO = true
+		}
+	}
+	require.True(t, hasAddress, "expected address span, got %v", spans)
+	require.False(t, hasFIO, "street name must not be masked as ФИО, got %v", spans)
 }

@@ -65,9 +65,33 @@ func (d *Detector) detectParallel(text string) []Span {
 
 // resolveAll appends semantic spans and resolves overlaps.
 func resolveAll(text string, spans []Span) []Span {
-	spans = append(spans, detectFIO(text)...)
-	spans = append(spans, detectAddress(text)...)
+	// Detect address spans first so street names inside addresses are not
+	// misclassified as FIO.
+	addresses := detectAddress(text)
+	spans = append(spans, addresses...)
+	spans = append(spans, filterFIOOverlappingAddress(text, detectFIO(text), addresses)...)
 	return ResolveOverlaps(spans)
+}
+
+// filterFIOOverlappingAddress drops FIO spans that overlap an address span.
+func filterFIOOverlappingAddress(text string, fio, addresses []Span) []Span {
+	if len(addresses) == 0 {
+		return fio
+	}
+	var kept []Span
+	for _, f := range fio {
+		overlap := false
+		for _, a := range addresses {
+			if f.Start < a.End && a.Start < f.End {
+				overlap = true
+				break
+			}
+		}
+		if !overlap {
+			kept = append(kept, f)
+		}
+	}
+	return kept
 }
 
 // ruleSpans returns the spans produced by a single rule.

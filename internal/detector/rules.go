@@ -49,12 +49,16 @@ func StructuredRules() []Rule {
 		{TypeBirthCertificate, regexp.MustCompile(`(?i)\b\d{2}\s?\d{2}\s\d{6}\b`), 2,
 			regexp.MustCompile(`(?i)(?:свидетельство\s+о\s+рождении)`), nil, "",
 		},
-		{TypeBirthDate, regexp.MustCompile(`(?i)\b\d{2}[./-]\d{2}[./-]\d{4}\b`), 0, nil, nil, ""},
+		{TypeBirthDate, regexp.MustCompile(`(?i)\b\d{2}[./-]\d{2}[./-]\d{4}\b`), 0,
+			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, ""},
 		// Year-first date format: гггг.дд.мм or гггг-дд-мм.
-		{TypeBirthDate, regexp.MustCompile(`(?i)\b\d{4}[./-]\d{2}[./-]\d{2}\b`), 0, nil, nil, ""},
+		{TypeBirthDate, regexp.MustCompile(`(?i)\b\d{4}[./-]\d{2}[./-]\d{2}\b`), 0,
+			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, ""},
 		// Text date: "15 марта 1990 года" or "пятнадцатого марта 1990 года".
-		{TypeBirthDate, regexp.MustCompile(`(?i)(?:^|\s)\d{1,2}\s+[а-яё]+\s+\d{4}\s+года(?:\s|$)`), 0, nil, nil, ""},
-		{TypeBirthDate, regexp.MustCompile(`(?i)(?:^|\s)[а-яё]+\s+[а-яё]+\s+\d{4}\s+года(?:\s|$)`), 0, nil, nil, ""},
+		{TypeBirthDate, regexp.MustCompile(`(?i)(?:^|\s)\d{1,2}\s+[а-яё]+\s+\d{4}\s+года(?:\s|$)`), 0,
+			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, ""},
+		{TypeBirthDate, regexp.MustCompile(`(?i)(?:^|\s)[а-яё]+\s+[а-яё]+\s+\d{4}\s+года(?:\s|$)`), 0,
+			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, ""},
 		// Context-dependent types: capture free text after a keyword.
 		{TypeBirthPlace, nil, 0, nil,
 			regexp.MustCompile(`(?i)(?:место\s+рождения|родил[а-я]+\s+в|родился\s+в|родилась\s+в)[:\s]+([^,;\n]{2,60})`), ""},

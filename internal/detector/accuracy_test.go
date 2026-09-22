@@ -19,6 +19,8 @@ var accuracyCases = []struct {
 	{"ИНН 7707083893", []Type{TypeINN}, nil},
 	{"карта 4276 1234 5678 9012", []Type{TypeCard}, nil},
 	{"дата рождения 15.03.1990", []Type{TypeBirthDate}, nil},
+	// Adversarial: a date without birth context is NOT PII.
+	{"Банк открылся 12 марта 1998 года", nil, []Type{TypeBirthDate}},
 	// Adversarial: literary mention is NOT PII.
 	{"Александр Пушкин написал роман", nil, []Type{TypeFIO}},
 	{"Лев Толстой родился в Ясной Поляне", nil, []Type{TypeFIO}},

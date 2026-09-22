@@ -199,6 +199,11 @@ func detectAddress(text string) []Span {
 		j := i
 		for j+1 < len(words) && isStreetToken(words[j+1].text) {
 			j++
+			// Consume the value following a street marker: the street name
+			// after ул/улица/проспект/..., and the number after д/дом/кв/квартира.
+			if j+1 < len(words) && !isStreetToken(words[j+1].text) {
+				j++
+			}
 		}
 		start := words[i].start
 		end := words[j].end
