@@ -181,3 +181,44 @@ func isNameToken(w string) bool {
 	lower := strings.ToLower(w)
 	return firstNames[lower] || isSurname(w)
 }
+
+// detectAddress finds address spans (city + street pattern) and scores them.
+func detectAddress(text string) []Span {
+	words := tokenize(text)
+	var spans []Span
+	for i := 0; i < len(words); i++ {
+		if !cities[strings.ToLower(words[i].text)] {
+			continue
+		}
+		// Extend over the address: city + following street tokens.
+		j := i
+		for j+1 < len(words) && isStreetToken(words[j+1].text) {
+			j++
+		}
+		start := words[i].start
+		end := words[j].end
+		ctxHits := 0
+		if hasContext(text, start, end, contextKeywords(TypeAddress)) {
+			ctxHits = 1
+		}
+		negHits := 0
+		if hasNegativeContext(text, start, end, negativeContext(TypeAddress)) {
+			negHits = 1
+		}
+		conf := scoreConfidence(0.5, true, ctxHits, negHits)
+		spans = append(spans, Span{Start: start, End: end, Type: TypeAddress, Confidence: conf})
+		i = j
+	}
+	return spans
+}
+
+// isStreetToken reports whether a word is a street/address marker.
+func isStreetToken(w string) bool {
+	lower := strings.ToLower(w)
+	switch lower {
+	case "ул", "улица", "проспект", "переулок", "шоссе", "бульвар",
+		"набережная", "д", "дом", "кв", "квартира", "г", "город":
+		return true
+	}
+	return false
+}

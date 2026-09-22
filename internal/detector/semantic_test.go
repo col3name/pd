@@ -59,3 +59,20 @@ func TestDetectFIO(t *testing.T) {
 	spans = detectFIO("обычный текст без имён")
 	require.Empty(t, spans)
 }
+
+func TestDetectAddress(t *testing.T) {
+	// Client address with context → high confidence.
+	spans := detectAddress("адрес клиента: г. Москва, ул. Ленина, д. 10")
+	require.Len(t, spans, 1)
+	require.Equal(t, TypeAddress, spans[0].Type)
+	require.GreaterOrEqual(t, spans[0].Confidence, float32(0.95))
+
+	// Bank address with negative context → low confidence.
+	spans = detectAddress("Банк находится по адресу Москва, ул. Тверская, 10")
+	require.Len(t, spans, 1)
+	require.Less(t, spans[0].Confidence, float32(0.75))
+
+	// No city/street → no span.
+	spans = detectAddress("обычный текст")
+	require.Empty(t, spans)
+}
