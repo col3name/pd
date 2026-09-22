@@ -15,6 +15,10 @@ type Config struct {
 	StoreTTL    time.Duration
 	AllowUnmask bool
 	MaskTypes   []detector.Type
+	// SensitiveTypes are masked only when another PII type is also present
+	// (co-occurrence rule). A lone sensitive value (e.g. a PIN without a card
+	// number) is left unmasked.
+	SensitiveTypes []detector.Type
 }
 
 func env(key, fallback string) string {
@@ -51,5 +55,7 @@ func Load() (*Config, error) {
 		detector.TypeINN, detector.TypeCard, detector.TypeCVV,
 		detector.TypePIN, detector.TypeCardholder,
 	}
+	// PIN and CVV are masked only when another PII type is present.
+	cfg.SensitiveTypes = []detector.Type{detector.TypePIN, detector.TypeCVV}
 	return cfg, nil
 }

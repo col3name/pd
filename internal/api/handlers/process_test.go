@@ -92,3 +92,23 @@ func TestProcessRedisDown(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Contains(t, resp.Result, "[ПАСПОРТ]")
 }
+
+func TestProcessSensitiveCooccurrence(t *testing.T) {
+	h := newTestHandler(t)
+	h.Cfg.SensitiveTypes = []detector.Type{detector.TypePIN, detector.TypeCVV}
+
+	// Lone PIN is not masked (co-occurrence rule).
+	rec := doProcess(t, h, "пин 1234", "co-1")
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp ProcessResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, "пин 1234", resp.Result)
+
+	// PIN + card number: both masked.
+	rec2 := doProcess(t, h, "пин 1234, карта 4276 1234 5678 9012", "co-2")
+	require.Equal(t, http.StatusOK, rec2.Code)
+	var resp2 ProcessResponse
+	require.NoError(t, json.Unmarshal(rec2.Body.Bytes(), &resp2))
+	require.Contains(t, resp2.Result, "[ПИН]")
+	require.Contains(t, resp2.Result, "[КАРТА]")
+}

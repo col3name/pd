@@ -36,10 +36,12 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	var req ProcessRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		slog.Warn("process: invalid request body", "error", err)
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 	if req.PayloadID == "" {
+		slog.Warn("process: missing payload_id")
 		http.Error(w, "payload_id is required", http.StatusBadRequest)
 		return
 	}
@@ -50,23 +52,32 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 			writeResult(w, ProcessResponse{Result: original})
 			observability.RequestsTotal.WithLabelValues("unmask", "200").Inc()
 			observability.RequestLatency.WithLabelValues("unmask").Observe(time.Since(start).Seconds())
+			slog.Info("process: unmasked", "payload_id", req.PayloadID, "latency_ms", time.Since(start).Milliseconds())
 			return
 		}
 	}
 
 	// Mask path: detect, mask, save original.
 	spans := h.Detector.Detect(req.Payload)
+	// Co-occurrence rule: a lone sensitive type (e.g. PIN without a card
+	// number) is not masked.
+	if len(spans) == 1 && h.isSensitive(spans[0].Type) {
+		spans = nil
+	}
 	masked := masker.Mask(req.Payload, spans)
+	types := make([]string, 0, len(spans))
 	for _, s := range spans {
+		types = append(types, string(s.Type))
 		observability.DetectedTotal.WithLabelValues(string(s.Type)).Inc()
 	}
 	if err := h.Store.Save(r.Context(), req.PayloadID, req.Payload); err != nil {
 		// Degrade gracefully: masking still works, unmask will fail-open.
-		slog.Warn("store save failed", "payload_id", req.PayloadID, "error", err)
+		slog.Warn("process: store save failed", "payload_id", req.PayloadID, "error", err)
 	}
 	writeResult(w, ProcessResponse{Result: masked})
 	observability.RequestsTotal.WithLabelValues("mask", "200").Inc()
 	observability.RequestLatency.WithLabelValues("mask").Observe(time.Since(start).Seconds())
+	slog.Info("process: masked", "payload_id", req.PayloadID, "types", types, "latency_ms", time.Since(start).Milliseconds())
 }
 
 func writeResult(w http.ResponseWriter, resp ProcessResponse) {
@@ -75,4 +86,15 @@ func writeResult(w http.ResponseWriter, resp ProcessResponse) {
 		slog.Error("failed to encode response", "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
+}
+
+// isSensitive reports whether t is a sensitive type that requires co-occurrence
+// with another PII type to be masked.
+func (h *Handler) isSensitive(t detector.Type) bool {
+	for _, s := range h.Cfg.SensitiveTypes {
+		if s == t {
+			return true
+		}
+	}
+	return false
 }

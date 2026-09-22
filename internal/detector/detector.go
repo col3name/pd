@@ -1,6 +1,11 @@
 package detector
 
-import "regexp"
+import (
+	"regexp"
+	"runtime"
+	"strings"
+	"sync"
+)
 
 // Detector scans text for personal-data spans.
 type Detector struct {
@@ -13,21 +18,68 @@ func New(rules []Rule) *Detector {
 }
 
 // Detect returns resolved, non-overlapping PII spans in text.
+// Rules are independent, so detection is parallelized across available CPUs.
 func (d *Detector) Detect(text string) []Span {
+	if len(d.rules) == 0 {
+		return nil
+	}
+	// For short inputs, sequential is faster (no goroutine overhead).
+	if len(text) < 4096 {
+		return d.detectSequential(text)
+	}
+	return d.detectParallel(text)
+}
+
+func (d *Detector) detectSequential(text string) []Span {
 	var spans []Span
 	for _, r := range d.rules {
-		if r.CaptureRe != nil {
-			spans = append(spans, captureSpans(text, r)...)
-			continue
-		}
-		for _, loc := range r.Re.FindAllStringIndex(text, -1) {
-			if r.ContextRe != nil && !contextMatches(text, loc[0], r.ContextRe) {
-				continue
-			}
-			spans = append(spans, Span{Start: loc[0], End: loc[1], Type: r.Type, Priority: r.Priority})
-		}
+		spans = append(spans, ruleSpans(text, r)...)
 	}
 	return ResolveOverlaps(spans)
+}
+
+func (d *Detector) detectParallel(text string) []Span {
+	n := runtime.GOMAXPROCS(0)
+	if n > len(d.rules) {
+		n = len(d.rules)
+	}
+	results := make([][]Span, len(d.rules))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, n)
+	for i, r := range d.rules {
+		wg.Add(1)
+		go func(i int, r Rule) {
+			defer wg.Done()
+			sem <- struct{}{}
+			results[i] = ruleSpans(text, r)
+			<-sem
+		}(i, r)
+	}
+	wg.Wait()
+	var spans []Span
+	for _, rs := range results {
+		spans = append(spans, rs...)
+	}
+	return ResolveOverlaps(spans)
+}
+
+// ruleSpans returns the spans produced by a single rule.
+func ruleSpans(text string, r Rule) []Span {
+	if r.CaptureRe != nil {
+		// Cheap pre-check: if the keyword is absent, skip the expensive regex.
+		if r.Keyword != "" && !strings.Contains(strings.ToLower(text), r.Keyword) {
+			return nil
+		}
+		return captureSpans(text, r)
+	}
+	var spans []Span
+	for _, loc := range r.Re.FindAllStringIndex(text, -1) {
+		if r.ContextRe != nil && !contextMatches(text, loc[0], r.ContextRe) {
+			continue
+		}
+		spans = append(spans, Span{Start: loc[0], End: loc[1], Type: r.Type, Priority: r.Priority})
+	}
+	return spans
 }
 
 // captureSpans extracts spans from a CaptureRe rule's group 1 matches.

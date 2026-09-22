@@ -13,6 +13,9 @@ const (
 	TypeDeptCode      Type = "КОД_ПОДРАЗДЕЛЕНИЯ"
 	TypePassportIssue Type = "ДАТА_ВЫДАЧИ"
 	TypeDriverLicense Type = "ВУ"
+	TypeForeignPassport Type = "ЗАГРАНПАСПОРТ"
+	TypeMilitaryID   Type = "ВОЕННЫЙ_БИЛЕТ"
+	TypeBirthCertificate Type = "СВИДЕТЕЛЬСТВО_О_РОЖДЕНИИ"
 	TypeAddress       Type = "АДРЕС"
 	TypeEmail         Type = "EMAIL"
 	TypePhone         Type = "ТЕЛЕФОН"
@@ -33,6 +36,9 @@ var placeholders = map[Type]string{
 	TypeDeptCode:      "[КОД_ПОДРАЗДЕЛЕНИЯ]",
 	TypePassportIssue: "[ДАТА_ВЫДАЧИ]",
 	TypeDriverLicense: "[ВУ]",
+	TypeForeignPassport: "[ЗАГРАНПАСПОРТ]",
+	TypeMilitaryID:   "[ВОЕННЫЙ_БИЛЕТ]",
+	TypeBirthCertificate: "[СВИДЕТЕЛЬСТВО_О_РОЖДЕНИИ]",
 	TypeAddress:       "[АДРЕС]",
 	TypeEmail:         "[EMAIL]",
 	TypePhone:         "[ТЕЛЕФОН]",

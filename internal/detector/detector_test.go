@@ -100,3 +100,27 @@ func TestDetectDateFormats(t *testing.T) {
 		require.True(t, found, "expected date in %q, got %v", c, spans)
 	}
 }
+
+func TestDetectOtherDocuments(t *testing.T) {
+	d := New(StructuredRules())
+	cases := []struct {
+		text string
+		typ  Type
+	}{
+		{"загранпаспорт 71 1234567", TypeForeignPassport},
+		{"заграничный паспорт 71 1234567", TypeForeignPassport},
+		{"военный билет 77 12 345678", TypeMilitaryID},
+		{"свидетельство о рождении 77 12 345678", TypeBirthCertificate},
+	}
+	for _, c := range cases {
+		spans := d.Detect(c.text)
+		found := false
+		for _, s := range spans {
+			if s.Type == c.typ {
+				found = true
+				break
+			}
+		}
+		require.True(t, found, "expected %s in %q, got %v", c.typ, c.text, spans)
+	}
+}
