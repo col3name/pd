@@ -1,0 +1,44 @@
+openapi: 3.0.3
+info:
+  title: Модуль безопасности ПД — контракт /process
+  version: "1.0.0"
+paths:
+  /process:
+    post:
+      operationId: process
+      summary: Маскирование/демаскирование строки (коррелируется по payload_id)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcessRequest"
+      responses:
+        "200":
+          description: Успешная обработка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessResponse"
+        "429":
+          description: Слишком много запросов
+        "4XX":
+          description: Ошибка запроса
+        "5XX":
+          description: Внутренняя ошибка сервиса
+components:
+  schemas:
+    ProcessRequest:
+      type: object
+      required: [payload, payload_id]
+      properties:
+        payload:
+          type: string
+        payload_id:
+          type: string
+    ProcessResponse:
+      type: object
+      required: [result]
+      properties:
+        result:
+          type: string
