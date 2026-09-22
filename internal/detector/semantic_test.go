@@ -39,3 +39,20 @@ func TestHasNegativeContext(t *testing.T) {
 	text := "Банк находится по адресу Москва, ул. Тверская, 10"
 	require.True(t, hasNegativeContext(text, 0, len(text), negativeContext(TypeAddress)))
 }
+
+func TestDetectFIO(t *testing.T) {
+	// Full name with context keyword → high confidence.
+	spans := detectFIO("Клиент Иванов Иван Иванович")
+	require.Len(t, spans, 1)
+	require.Equal(t, TypeFIO, spans[0].Type)
+	require.GreaterOrEqual(t, spans[0].Confidence, float32(0.95))
+
+	// Name without context → low confidence (0.8), still returned.
+	spans = detectFIO("Александр Пушкин написал")
+	require.Len(t, spans, 1)
+	require.Equal(t, float32(0.8), spans[0].Confidence)
+
+	// No name → no span.
+	spans = detectFIO("обычный текст без имён")
+	require.Empty(t, spans)
+}

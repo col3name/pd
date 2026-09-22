@@ -116,3 +116,68 @@ func scoreConfidence(base float32, dictHit bool, ctxHits, negHits int) float32 {
 	}
 	return score
 }
+
+// detectFIO finds FIO spans (consecutive name/surname tokens) and scores them.
+func detectFIO(text string) []Span {
+	words := tokenize(text)
+	var spans []Span
+	for i := 0; i < len(words); i++ {
+		w := words[i]
+		if !isNameToken(w.text) {
+			continue
+		}
+		// Extend over consecutive name tokens.
+		j := i
+		for j+1 < len(words) && isNameToken(words[j+1].text) {
+			j++
+		}
+		start := words[i].start
+		end := words[j].end
+		dictHit := true
+		ctxHits := 0
+		if hasContext(text, start, end, contextKeywords(TypeFIO)) {
+			ctxHits = 1
+		}
+		conf := scoreConfidence(0.5, dictHit, ctxHits, 0)
+		spans = append(spans, Span{Start: start, End: end, Type: TypeFIO, Confidence: conf})
+		i = j
+	}
+	return spans
+}
+
+// word is a token with its byte offsets in the source text.
+type word struct {
+	text  string
+	start int
+	end   int
+}
+
+// tokenize splits text into words with byte offsets.
+func tokenize(text string) []word {
+	var words []word
+	start := -1
+	for i := 0; i < len(text); i++ {
+		c := text[i]
+		if c == ' ' || c == '\t' || c == '\n' || c == ',' || c == '.' ||
+			c == ':' || c == ';' || c == '(' || c == ')' || c == '-' {
+			if start >= 0 {
+				words = append(words, word{text: text[start:i], start: start, end: i})
+				start = -1
+			}
+			continue
+		}
+		if start < 0 {
+			start = i
+		}
+	}
+	if start >= 0 {
+		words = append(words, word{text: text[start:], start: start, end: len(text)})
+	}
+	return words
+}
+
+// isNameToken reports whether a word is a first name or surname.
+func isNameToken(w string) bool {
+	lower := strings.ToLower(w)
+	return firstNames[lower] || isSurname(w)
+}
