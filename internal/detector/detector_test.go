@@ -161,6 +161,23 @@ func TestDetectSmartPathHighConfidenceSkipsNER(t *testing.T) {
 	require.False(t, ner.called, "NER should NOT be called for high-confidence spans")
 }
 
+func TestDetectSmartPathFiltersNERFIOOverlappingAddress(t *testing.T) {
+	// NER returns a FIO span that overlaps an address. resolveAll must filter
+	// it out so street names inside addresses are not misclassified as FIO.
+	text := "г. Москва, ул. Ленина, д. 10"
+	// The address is detected with mid-confidence (no context keyword), which
+	// triggers the smart path.
+	ner := &mockNER{spans: []Span{
+		{Start: 0, End: len(text), Type: TypeFIO, Confidence: 0.9},
+	}}
+	d := New(StructuredRules(), WithNER(ner))
+	spans := d.Detect(text)
+	require.True(t, ner.called, "NER should be called for mid-confidence spans")
+	for _, s := range spans {
+		require.NotEqual(t, TypeFIO, s.Type, "NER FIO overlapping an address must be filtered")
+	}
+}
+
 func TestDetectOtherDocuments(t *testing.T) {
 	d := New(StructuredRules())
 	cases := []struct {

@@ -70,7 +70,7 @@ func (d *Detector) smartPath(text string, spans []Span) []Span {
 		return spans
 	}
 	nerSpans := d.ner.Detect(text)
-	return ResolveOverlaps(append(spans, nerSpans...))
+	return resolveAll(text, append(spans, nerSpans...))
 }
 
 func (d *Detector) detectSequential(text string) []Span {
@@ -111,9 +111,18 @@ func resolveAll(text string, spans []Span) []Span {
 	// Detect address spans first so street names inside addresses are not
 	// misclassified as FIO.
 	addresses := detectAddress(text)
-	spans = append(spans, addresses...)
-	spans = append(spans, filterFIOOverlappingAddress(text, detectFIO(text), addresses)...)
-	return ResolveOverlaps(spans)
+	// Filter any FIO spans (rule-based or NER) that overlap an address.
+	var fio, rest []Span
+	for _, s := range spans {
+		if s.Type == TypeFIO {
+			fio = append(fio, s)
+		} else {
+			rest = append(rest, s)
+		}
+	}
+	rest = append(rest, addresses...)
+	rest = append(rest, filterFIOOverlappingAddress(text, append(fio, detectFIO(text)...), addresses)...)
+	return ResolveOverlaps(rest)
 }
 
 // filterFIOOverlappingAddress drops FIO spans that overlap an address span.

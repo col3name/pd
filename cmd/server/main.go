@@ -20,6 +20,7 @@ import (
 	"github.com/kind-earthquake/pii-module/internal/api/handlers"
 	"github.com/kind-earthquake/pii-module/internal/config"
 	"github.com/kind-earthquake/pii-module/internal/detector"
+	"github.com/kind-earthquake/pii-module/internal/ner"
 	"github.com/kind-earthquake/pii-module/internal/observability"
 	"github.com/kind-earthquake/pii-module/internal/ratelimit"
 	"github.com/kind-earthquake/pii-module/internal/store"
@@ -35,8 +36,24 @@ func main() {
 	redisClient := redis.NewClient(redisOptions(cfg.RedisURL))
 	st := store.New(redisClient, cfg.StoreTTL)
 
+	detectorOpts := []detector.Option{}
+	var nerModel *ner.Model
+	if modelPath := os.Getenv("NER_MODEL_PATH"); modelPath != "" {
+		if vocabPath := os.Getenv("NER_VOCAB_PATH"); vocabPath != "" {
+			labels := []string{"O", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG"}
+			m, err := ner.NewModel(modelPath, vocabPath, labels, 128)
+			if err != nil {
+				slog.Warn("failed to load NER model; continuing without NER", "error", err)
+			} else {
+				nerModel = m
+				detectorOpts = append(detectorOpts, detector.WithNER(m))
+				slog.Info("NER model loaded", "model", modelPath)
+			}
+		}
+	}
+
 	h := &handlers.Handler{
-		Detector: detector.New(detector.StructuredRules()),
+		Detector: detector.New(detector.StructuredRules(), detectorOpts...),
 		Store:    st,
 		Cfg:      cfg,
 	}
@@ -78,6 +95,9 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
+	if nerModel != nil {
+		_ = nerModel.Close()
+	}
 }
 
 // redisOptions converts a redis URL (redis://host:port/db) into redis.Options,

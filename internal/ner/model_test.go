@@ -21,8 +21,7 @@ func TestModelDetect(t *testing.T) {
 	require.NoError(t, err)
 	defer m.Close()
 
-	spans, err := m.Detect("Иван Иванов")
-	require.NoError(t, err)
+	spans := m.Detect("Иван Иванов")
 	// We don't assert specific spans (model-dependent); just that it ran.
 	_ = spans
 }
