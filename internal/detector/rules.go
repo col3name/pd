@@ -30,7 +30,7 @@ func StructuredRules() []Rule {
 		{TypeINN, regexp.MustCompile(`(?i)\b\d{10,12}\b`), 0, nil, nil, ""},
 		{TypeCard, regexp.MustCompile(`(?i)\b\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\b`), 0, nil, nil, ""},
 		{TypeCVV, regexp.MustCompile(`(?i)\bcvv[:\s]*\d{3}\b`), 0, nil, nil, ""},
-		{TypePIN, regexp.MustCompile(`(?i)(?:^|\s)пин[:\s]*\d{4}\b`), 0, nil, nil, ""},
+		{TypePIN, regexp.MustCompile(`(?i)(?:^|\s)(?:пин|pin)[:\s]*\d{4}\b`), 0, nil, nil, ""},
 		{TypeEmail, regexp.MustCompile(`(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b`), 0, nil, nil, ""},
 		{TypePhone, regexp.MustCompile(`(?i)(?:\+7|\b8)[\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}`), 0, nil, nil, ""},
 		{TypeDeptCode, regexp.MustCompile(`(?i)\b\d{3}[-–]\d{3}\b`), 0, nil, nil, ""},
@@ -55,9 +55,9 @@ func StructuredRules() []Rule {
 		{TypeBirthDate, regexp.MustCompile(`(?i)\b\d{4}[./-]\d{2}[./-]\d{2}\b`), 0,
 			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, ""},
 		// Text date: "15 марта 1990 года" or "пятнадцатого марта 1990 года".
-		{TypeBirthDate, regexp.MustCompile(`(?i)(?:^|\s)\d{1,2}\s+[а-яё]+\s+\d{4}\s+года(?:\s|$)`), 0,
+		{TypeBirthDate, regexp.MustCompile(`(?i)(?:^|\s)\d{1,2}\s+[а-яё]+\s+\d{4}\s+года(?:\s|[,.;]|$)`), 0,
 			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, ""},
-		{TypeBirthDate, regexp.MustCompile(`(?i)(?:^|\s)[а-яё]+\s+[а-яё]+\s+\d{4}\s+года(?:\s|$)`), 0,
+		{TypeBirthDate, regexp.MustCompile(`(?i)(?:^|\s)[а-яё]+\s+[а-яё]+\s+\d{4}\s+года(?:\s|[,.;]|$)`), 0,
 			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, ""},
 		// Context-dependent types: capture free text after a keyword.
 		{TypeBirthPlace, nil, 0, nil,

@@ -87,6 +87,8 @@ func TestDetectDateFormats(t *testing.T) {
 		"дата рождения 1990-15-03",       // гггг-дд-мм
 		"дата рождения 15 марта 1990 года", // text date
 		"дата рождения пятнадцатого марта 1990 года", // text date (words)
+		"родился 12 марта 1998 года, телефон +7 999 123-45-67", // text date followed by comma
+		"родился 12 марта 1998 года.", // text date followed by period
 	}
 	for _, c := range cases {
 		spans := d.Detect(c)
@@ -99,6 +101,20 @@ func TestDetectDateFormats(t *testing.T) {
 		}
 		require.True(t, found, "expected date in %q, got %v", c, spans)
 	}
+}
+
+func TestDetectPINLatin(t *testing.T) {
+	d := New(StructuredRules())
+	// Latin "PIN" must be detected like Cyrillic "пин".
+	spans := d.Detect("PIN 1234")
+	found := false
+	for _, s := range spans {
+		if s.Type == TypePIN {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "expected PIN in %q, got %v", "PIN 1234", spans)
 }
 
 func TestDetectSemanticFIO(t *testing.T) {
