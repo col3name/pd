@@ -21,6 +21,7 @@ import (
 	"github.com/kind-earthquake/pii-module/internal/config"
 	"github.com/kind-earthquake/pii-module/internal/detector"
 	"github.com/kind-earthquake/pii-module/internal/observability"
+	"github.com/kind-earthquake/pii-module/internal/ratelimit"
 	"github.com/kind-earthquake/pii-module/internal/store"
 )
 
@@ -38,6 +39,11 @@ func main() {
 		Detector: detector.New(detector.StructuredRules()),
 		Store:    st,
 		Cfg:      cfg,
+	}
+	// Rate limiter: enabled only when RATE_LIMIT_RPS > 0.
+	if cfg.RateLimitRPS > 0 {
+		h.Limiter = ratelimit.New(cfg.RateLimitRPS, cfg.RateLimitBurst)
+		slog.Info("rate limiting enabled", "rps", cfg.RateLimitRPS, "burst", cfg.RateLimitBurst)
 	}
 
 	r := chi.NewRouter()

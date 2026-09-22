@@ -14,6 +14,7 @@ import (
 
 	"github.com/kind-earthquake/pii-module/internal/config"
 	"github.com/kind-earthquake/pii-module/internal/detector"
+	"github.com/kind-earthquake/pii-module/internal/ratelimit"
 	"github.com/kind-earthquake/pii-module/internal/store"
 )
 
@@ -111,4 +112,19 @@ func TestProcessSensitiveCooccurrence(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec2.Body.Bytes(), &resp2))
 	require.Contains(t, resp2.Result, "[ПИН]")
 	require.Contains(t, resp2.Result, "[КАРТА]")
+}
+
+func TestProcessRateLimit(t *testing.T) {
+	h := newTestHandler(t)
+	// Allow only 2 requests, then reject.
+	h.Limiter = ratelimit.New(2, 2)
+
+	rec1 := doProcess(t, h, "паспорт 4509 123456", "rl-1")
+	require.Equal(t, http.StatusOK, rec1.Code)
+	rec2 := doProcess(t, h, "паспорт 4509 123456", "rl-2")
+	require.Equal(t, http.StatusOK, rec2.Code)
+	// Third request exceeds the limit -> 429 with Retry-After.
+	rec3 := doProcess(t, h, "паспорт 4509 123456", "rl-3")
+	require.Equal(t, http.StatusTooManyRequests, rec3.Code)
+	require.NotEmpty(t, rec3.Header().Get("Retry-After"))
 }

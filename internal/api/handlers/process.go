@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/kind-earthquake/pii-module/internal/config"
 	"github.com/kind-earthquake/pii-module/internal/detector"
 	"github.com/kind-earthquake/pii-module/internal/masker"
 	"github.com/kind-earthquake/pii-module/internal/observability"
+	"github.com/kind-earthquake/pii-module/internal/ratelimit"
 	"github.com/kind-earthquake/pii-module/internal/store"
 )
 
@@ -29,11 +31,24 @@ type Handler struct {
 	Detector *detector.Detector
 	Store    *store.Store
 	Cfg      *config.Config
+	Limiter  *ratelimit.Limiter
 }
 
 // Process handles masking (new payload_id) and unmasking (existing payload_id).
 func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+
+	// Rate limit: return 429 with Retry-After when the bucket is empty.
+	if h.Limiter != nil {
+		if ok, retryAfter := h.Limiter.Allow(); !ok {
+			w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
+			http.Error(w, "too many requests", http.StatusTooManyRequests)
+			observability.RequestsTotal.WithLabelValues("mask", "429").Inc()
+			slog.Warn("process: rate limited", "retry_after_s", retryAfter.Seconds())
+			return
+		}
+	}
+
 	var req ProcessRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		slog.Warn("process: invalid request body", "error", err)

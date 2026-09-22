@@ -19,6 +19,11 @@ type Config struct {
 	// (co-occurrence rule). A lone sensitive value (e.g. a PIN without a card
 	// number) is left unmasked.
 	SensitiveTypes []detector.Type
+	// RateLimitRPS is the max requests per second before 429 is returned.
+	// 0 disables rate limiting.
+	RateLimitRPS float64
+	// RateLimitBurst is the token-bucket burst capacity.
+	RateLimitBurst float64
 }
 
 func env(key, fallback string) string {
@@ -57,5 +62,20 @@ func Load() (*Config, error) {
 	}
 	// PIN and CVV are masked only when another PII type is present.
 	cfg.SensitiveTypes = []detector.Type{detector.TypePIN, detector.TypeCVV}
+	// Rate limiting: default 0 (disabled). Enable via RATE_LIMIT_RPS.
+	cfg.RateLimitRPS = envFloat("RATE_LIMIT_RPS", 0)
+	cfg.RateLimitBurst = envFloat("RATE_LIMIT_BURST", cfg.RateLimitRPS)
 	return cfg, nil
+}
+
+func envFloat(key string, fallback float64) float64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	var f float64
+	if _, err := fmt.Sscanf(v, "%f", &f); err == nil && f > 0 {
+		return f
+	}
+	return fallback
 }
