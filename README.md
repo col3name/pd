@@ -63,6 +63,21 @@ curl -X POST http://localhost:8080/process \
 # → {"result":"паспорт [ПАСПОРТ], email [EMAIL]"}
 ```
 
+## Опциональный NER (smart path)
+
+Для неоднозначных случаев (mid-confidence или отсутствие rule-based совпадений)
+можно подключить ML NER-модель (rubert-tiny в ONNX). Это опционально: без модели
+шлюз работает на rule-based детекторе.
+
+### Установка
+
+1. Скачайте ONNX-модель и vocab: `./scripts/setup_ner.sh`
+2. Укажите путь к onnxruntime shared library: `export ONNXRUNTIME_SHARED_LIBRARY_PATH=/path/to/libonnxruntime.so`
+3. Запустите сервер с переменными `NER_MODEL_PATH` и `NER_VOCAB_PATH`.
+
+Если модель недоступна, шлюз продолжает работать на rule-based детекторе
+(graceful degradation).
+
 ## Контракт API
 
 ### `POST /process`
