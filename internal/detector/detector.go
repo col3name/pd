@@ -84,7 +84,7 @@ func ruleSpans(text string, r Rule) []Span {
 		if r.ContextRe != nil && !contextMatches(text, loc[0], r.ContextRe) {
 			continue
 		}
-		spans = append(spans, Span{Start: loc[0], End: loc[1], Type: r.Type, Priority: r.Priority})
+		spans = append(spans, Span{Start: loc[0], End: loc[1], Type: r.Type, Priority: r.Priority, Confidence: 1.0})
 	}
 	return spans
 }
@@ -95,7 +95,7 @@ func captureSpans(text string, r Rule) []Span {
 	for _, m := range r.CaptureRe.FindAllStringSubmatchIndex(text, -1) {
 		// m[2], m[3] are the bounds of group 1 (the captured value).
 		if len(m) >= 4 && m[2] >= 0 {
-			spans = append(spans, Span{Start: m[2], End: m[3], Type: r.Type, Priority: r.Priority})
+			spans = append(spans, Span{Start: m[2], End: m[3], Type: r.Type, Priority: r.Priority, Confidence: 1.0})
 		}
 	}
 	return spans

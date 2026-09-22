@@ -114,6 +114,37 @@ func TestProcessSensitiveCooccurrence(t *testing.T) {
 	require.Contains(t, resp2.Result, "[КАРТА]")
 }
 
+func TestGateSpans(t *testing.T) {
+	h := &Handler{}
+	// High confidence → kept.
+	spans := []detector.Span{
+		{Start: 0, End: 5, Type: detector.TypeEmail, Confidence: 0.99},
+	}
+	got := h.gateSpans("test@example.com", spans)
+	require.Len(t, got, 1)
+
+	// Mid confidence with context → kept.
+	spans = []detector.Span{
+		{Start: 7, End: 30, Type: detector.TypeFIO, Confidence: 0.8},
+	}
+	got = h.gateSpans("Клиент Иванов Иван Иванович", spans)
+	require.Len(t, got, 1)
+
+	// Mid confidence without context → dropped.
+	spans = []detector.Span{
+		{Start: 0, End: 20, Type: detector.TypeFIO, Confidence: 0.8},
+	}
+	got = h.gateSpans("Александр Пушкин написал", spans)
+	require.Empty(t, got)
+
+	// Low confidence → dropped.
+	spans = []detector.Span{
+		{Start: 0, End: 20, Type: detector.TypeAddress, Confidence: 0.5},
+	}
+	got = h.gateSpans("Банк находится по адресу Москва", spans)
+	require.Empty(t, got)
+}
+
 func TestProcessRateLimit(t *testing.T) {
 	h := newTestHandler(t)
 	// Allow only 2 requests, then reject.

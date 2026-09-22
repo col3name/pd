@@ -73,7 +73,7 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Mask path: detect, mask, save original.
-	spans := h.Detector.Detect(req.Payload)
+	spans := h.gateSpans(req.Payload, h.Detector.Detect(req.Payload))
 	// Co-occurrence rule: a lone sensitive type (e.g. PIN without a card
 	// number) is not masked.
 	if len(spans) == 1 && h.isSensitive(spans[0].Type) {
@@ -112,4 +112,22 @@ func (h *Handler) isSensitive(t detector.Type) bool {
 		}
 	}
 	return false
+}
+
+// gateSpans filters spans by the 3-threshold confidence model.
+func (h *Handler) gateSpans(text string, spans []detector.Span) []detector.Span {
+	var kept []detector.Span
+	for _, s := range spans {
+		switch {
+		case s.Confidence >= 0.95:
+			kept = append(kept, s)
+		case s.Confidence >= 0.75:
+			if detector.HasContext(text, s.Start, s.End, s.Type) {
+				kept = append(kept, s)
+			}
+		default:
+			// below 0.75 → drop
+		}
+	}
+	return kept
 }

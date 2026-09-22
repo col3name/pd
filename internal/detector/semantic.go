@@ -74,6 +74,11 @@ func hasContext(text string, start, end int, keywords []string) bool {
 	return hasAnyKeyword(text, start, end, keywords)
 }
 
+// HasContext reports whether a context keyword for t appears near the span.
+func HasContext(text string, start, end int, t Type) bool {
+	return hasContext(text, start, end, contextKeywords(t))
+}
+
 // hasNegativeContext reports whether any negative keyword appears in a window.
 func hasNegativeContext(text string, start, end int, keywords []string) bool {
 	return hasAnyKeyword(text, start, end, keywords)
