@@ -19,6 +19,18 @@ var accuracyCases = []struct {
 	{"ИНН 7707083893", []Type{TypeINN}, nil},
 	{"карта 4276 1234 5678 9012", []Type{TypeCard}, nil},
 	{"дата рождения 15.03.1990", []Type{TypeBirthDate}, nil},
+	// Adversarial: literary mention is NOT PII.
+	{"Александр Пушкин написал роман", nil, []Type{TypeFIO}},
+	{"Лев Толстой родился в Ясной Поляне", nil, []Type{TypeFIO}},
+	// Adversarial: bank address is NOT PII.
+	{"Банк находится по адресу Москва, ул. Тверская, 10", nil, []Type{TypeAddress}},
+	{"Ближайшее отделение банка на ул. Ленина, 10", nil, []Type{TypeAddress}},
+	// Positive: client address IS PII.
+	{"адрес клиента: г. Москва, ул. Ленина, д. 10", []Type{TypeAddress}, nil},
+	{"проживает по адресу: г. Санкт-Петербург, Невский проспект, д. 10", []Type{TypeAddress}, nil},
+	// PIN co-occurrence is covered by TestProcessSensitiveCooccurrence in the
+	// handler package (the co-occurrence rule lives in the handler, not the
+	// detector), so it is intentionally not asserted here.
 }
 
 func TestAccuracy(t *testing.T) {
@@ -26,7 +38,10 @@ func TestAccuracy(t *testing.T) {
 	total := 0
 	correct := 0
 	for _, c := range accuracyCases {
-		spans := d.Detect(c.text)
+		// Apply the same 3-threshold confidence gate the handler uses, so the
+		// adversarial "not PII" cases (literary FIO, bank address) reflect what
+		// is actually masked rather than every raw candidate span.
+		spans := gateForTest(c.text, d.Detect(c.text))
 		got := map[Type]bool{}
 		for _, s := range spans {
 			got[s.Type] = true
@@ -50,4 +65,22 @@ func TestAccuracy(t *testing.T) {
 	}
 	require.GreaterOrEqual(t, total, 1)
 	require.GreaterOrEqual(t, float64(correct)/float64(total), 0.95, "accuracy below 95%%")
+}
+
+// gateForTest mirrors the handler's 3-threshold confidence gate: spans below
+// 0.75 are dropped, and mid-confidence spans (0.75-0.95) are kept only when a
+// context keyword is present.
+func gateForTest(text string, spans []Span) []Span {
+	var kept []Span
+	for _, s := range spans {
+		switch {
+		case s.Confidence >= 0.95:
+			kept = append(kept, s)
+		case s.Confidence >= 0.75:
+			if HasContext(text, s.Start, s.End, s.Type) {
+				kept = append(kept, s)
+			}
+		}
+	}
+	return kept
 }
