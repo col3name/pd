@@ -46,3 +46,57 @@ func TestDetectPassportVsDriverLicenseContext(t *testing.T) {
 	bare := d.Detect("номер 4509 123456")
 	require.Empty(t, bare)
 }
+
+func TestDetectContextDependentTypes(t *testing.T) {
+	d := New(StructuredRules())
+
+	cases := []struct {
+		text string
+		typ  Type
+	}{
+		{"место рождения: г. Москва", TypeBirthPlace},
+		{"родился в городе Казань", TypeBirthPlace},
+		{"гражданство: Российская Федерация", TypeCitizenship},
+		{"гражданин России", TypeCitizenship},
+		{"выдан ОВД района Хамовники", TypeIssuer},
+		{"кем выдан: УФМС России по г. Москве", TypeIssuer},
+		{"адрес: г. Москва, ул. Тверская, д. 1, кв. 5", TypeAddress},
+		{"проживает по адресу: г. Санкт-Петербург, Невский проспект, д. 10", TypeAddress},
+		{"держатель карты: Иван Петров", TypeCardholder},
+		{"имя держателя: Мария Иванова", TypeCardholder},
+	}
+	for _, c := range cases {
+		spans := d.Detect(c.text)
+		found := false
+		for _, s := range spans {
+			if s.Type == c.typ {
+				found = true
+				break
+			}
+		}
+		require.True(t, found, "expected %s in %q, got %v", c.typ, c.text, spans)
+	}
+}
+
+func TestDetectDateFormats(t *testing.T) {
+	d := New(StructuredRules())
+	cases := []string{
+		"дата рождения 15.03.1990",       // дд.мм.гггг
+		"дата рождения 03.15.1990",       // мм.дд.гггг
+		"дата рождения 1990.15.03",       // гггг.дд.мм
+		"дата рождения 1990-15-03",       // гггг-дд-мм
+		"дата рождения 15 марта 1990 года", // text date
+		"дата рождения пятнадцатого марта 1990 года", // text date (words)
+	}
+	for _, c := range cases {
+		spans := d.Detect(c)
+		found := false
+		for _, s := range spans {
+			if s.Type == TypeBirthDate {
+				found = true
+				break
+			}
+		}
+		require.True(t, found, "expected date in %q, got %v", c, spans)
+	}
+}
