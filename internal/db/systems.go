@@ -16,7 +16,7 @@ var ErrNotFound = errors.New("not found")
 // ListSystems returns all consumer systems.
 func (r *Repo) ListSystems(ctx context.Context) ([]config.SystemConfig, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT name, api_key_hash, enabled, allow_unmask, masking, pii FROM systems ORDER BY name`)
+		`SELECT name, api_key_hash, enabled, allow_unmask, require_key, masking, pii FROM systems ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -25,7 +25,7 @@ func (r *Repo) ListSystems(ctx context.Context) ([]config.SystemConfig, error) {
 	for rows.Next() {
 		var s config.SystemConfig
 		var pii []string
-		if err := rows.Scan(&s.Name, &s.APIKey, &s.Enabled, &s.AllowUnmask, &s.Masking, &pii); err != nil {
+		if err := rows.Scan(&s.Name, &s.APIKey, &s.Enabled, &s.AllowUnmask, &s.RequireKey, &s.Masking, &pii); err != nil {
 			return nil, err
 		}
 		s.PII = toTypes(pii)
@@ -39,8 +39,8 @@ func (r *Repo) GetSystem(ctx context.Context, name string) (*config.SystemConfig
 	var s config.SystemConfig
 	var pii []string
 	err := r.pool.QueryRow(ctx,
-		`SELECT name, api_key_hash, enabled, allow_unmask, masking, pii FROM systems WHERE name=$1`, name).
-		Scan(&s.Name, &s.APIKey, &s.Enabled, &s.AllowUnmask, &s.Masking, &pii)
+		`SELECT name, api_key_hash, enabled, allow_unmask, require_key, masking, pii FROM systems WHERE name=$1`, name).
+		Scan(&s.Name, &s.APIKey, &s.Enabled, &s.AllowUnmask, &s.RequireKey, &s.Masking, &pii)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -54,17 +54,17 @@ func (r *Repo) GetSystem(ctx context.Context, name string) (*config.SystemConfig
 // CreateSystem inserts a new system.
 func (r *Repo) CreateSystem(ctx context.Context, s config.SystemConfig) error {
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO systems (name, api_key_hash, enabled, allow_unmask, masking, pii)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		s.Name, s.APIKey, s.Enabled, s.AllowUnmask, s.Masking, fromTypes(s.PII))
+		`INSERT INTO systems (name, api_key_hash, enabled, allow_unmask, require_key, masking, pii)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		s.Name, s.APIKey, s.Enabled, s.AllowUnmask, s.RequireKey, s.Masking, fromTypes(s.PII))
 	return err
 }
 
 // UpdateSystem updates an existing system by name.
 func (r *Repo) UpdateSystem(ctx context.Context, name string, s config.SystemConfig) error {
 	tag, err := r.pool.Exec(ctx,
-		`UPDATE systems SET enabled=$2, allow_unmask=$3, masking=$4, pii=$5, updated_at=now() WHERE name=$1`,
-		name, s.Enabled, s.AllowUnmask, s.Masking, fromTypes(s.PII))
+		`UPDATE systems SET enabled=$2, allow_unmask=$3, require_key=$4, masking=$5, pii=$6, updated_at=now() WHERE name=$1`,
+		name, s.Enabled, s.AllowUnmask, s.RequireKey, s.Masking, fromTypes(s.PII))
 	if err != nil {
 		return err
 	}

@@ -43,6 +43,7 @@ func (r *Repo) migrate(ctx context.Context) error {
 			api_key_hash  text NOT NULL DEFAULT '',
 			enabled       boolean NOT NULL DEFAULT true,
 			allow_unmask  boolean NOT NULL DEFAULT false,
+			require_key   boolean NOT NULL DEFAULT false,
 			masking       text NOT NULL DEFAULT '',
 			pii           text[] NOT NULL DEFAULT '{}',
 			created_at    timestamptz NOT NULL DEFAULT now(),
