@@ -24,6 +24,8 @@
 
 ## Архитектура
 
+![Архитектура PII Gateway](docs/images/arch.png)
+
 ```
 Система-потребитель / Жюри / LLM
      │  POST /process {payload, payload_id}   (один внешний порт :5173)
@@ -411,6 +413,10 @@ docker compose --profile redis up -d --build
 паролем (`config.Admin.Login`/`Password`, по умолчанию `admin`/`admin123`,
 bcrypt-хэш в таблице `admins`).
 
+![Админка — список команд](docs/images/admin-teams.png)
+![Админка — настройки ПД](docs/images/admin-teams-settings-pd.png)
+![Админка — дополнительные настройки](docs/images/admin-teams-settings-additional.png)
+
 | Эндпоинт | Метод | Описание |
 |----------|-------|----------|
 | `/v1/auth/login` | `POST` | Вход: `{"login","password"}` → `{"token"}`. |
@@ -473,6 +479,8 @@ curl -s -X POST http://localhost:5173/process \
 - Grafana: `http://5.42.118.103:3000` (admin/admin) — дашборд «PII Gateway»
   (`/d/pii-gateway/pii-gateway`) с панелями RPS, latency P95, ошибки,
   mask/unmask, PII по типам, Go runtime (heap, goroutines, GC).
+
+![Grafana-дашборд «PII Gateway»](docs/images/grafana.png)
 
 Логи — структурированные (slog), без значений ПД: `payload_id`, `types`, `latency_ms`.
 
