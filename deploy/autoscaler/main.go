@@ -21,6 +21,7 @@ type cfg struct {
 	cpuDown       float64
 	queueUp       float64
 	latencyP99MS  float64
+	cpuQuery      string
 	cooldown      time.Duration
 	poll          time.Duration
 }
@@ -42,7 +43,7 @@ func load() cfg {
 		}
 		return def
 	}
-	return cfg{
+	c := cfg{
 		promURL:      os.Getenv("PROM_URL"),
 		service:      os.Getenv("SERVICE"),
 		minReplicas:  atoi("MIN_REPLICAS", 2),
@@ -51,9 +52,14 @@ func load() cfg {
 		cpuDown:      atof("CPU_DOWN", 30),
 		queueUp:      atof("QUEUE_UP", 100),
 		latencyP99MS: atof("LATENCY_P99_MS", 100),
+		cpuQuery:     os.Getenv("CPU_QUERY"),
 		cooldown:     time.Duration(atoi("COOLDOWN_SECONDS", 30)) * time.Second,
 		poll:         time.Duration(atoi("POLL_SECONDS", 10)) * time.Second,
 	}
+	if c.cpuQuery == "" {
+		c.cpuQuery = `avg(rate(container_cpu_usage_seconds_total{name=~".*pii.*"}[1m])) * 100`
+	}
+	return c
 }
 
 func queryFloat(ctx context.Context, url string) (float64, error) {
@@ -66,6 +72,9 @@ func queryFloat(ctx context.Context, url string) (float64, error) {
 		return 0, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("prometheus returned status %d", resp.StatusCode)
+	}
 	body, _ := io.ReadAll(resp.Body)
 	var out struct {
 		Data struct {
@@ -102,35 +111,57 @@ func main() {
 	lastScale := time.Time{}
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		queueDepth, _ := queryFloat(ctx, c.promURL+"/api/v1/query?query=pii_queue_depth")
-		latency, _ := queryFloat(ctx, c.promURL+"/api/v1/query?query=histogram_quantile(0.99, sum(rate(pii_latency_seconds_bucket[1m])) by (le))")
+		queueDepth, err := queryFloat(ctx, c.promURL+"/api/v1/query?query=pii_queue_depth")
+		if err != nil {
+			cancel()
+			fmt.Fprintf(os.Stderr, "autoscaler: queue query: %v\n", err)
+			time.Sleep(c.poll)
+			continue
+		}
+		latency, err := queryFloat(ctx, c.promURL+"/api/v1/query?query=histogram_quantile(0.99, sum(rate(pii_latency_seconds_bucket[1m])) by (le))")
+		if err != nil {
+			cancel()
+			fmt.Fprintf(os.Stderr, "autoscaler: latency query: %v\n", err)
+			time.Sleep(c.poll)
+			continue
+		}
+		cpu, err := queryFloat(ctx, c.promURL+"/api/v1/query?query="+c.cpuQuery)
+		if err != nil {
+			cancel()
+			fmt.Fprintf(os.Stderr, "autoscaler: cpu query: %v\n", err)
+			time.Sleep(c.poll)
+			continue
+		}
 		cancel()
 
-		replicas, err := currentReplicas(context.Background(), c.service)
+		dctx, dcancel := context.WithTimeout(context.Background(), 10*time.Second)
+		replicas, err := currentReplicas(dctx, c.service)
 		if err != nil {
+			dcancel()
 			fmt.Fprintf(os.Stderr, "autoscaler: inspect: %v\n", err)
 			time.Sleep(c.poll)
 			continue
 		}
 
-		scaleUp := queueDepth > c.queueUp || latency > c.latencyP99MS
-		scaleDown := queueDepth < c.queueUp/10 && latency < c.latencyP99MS/10
+		scaleUp := cpu > c.cpuUp || queueDepth > c.queueUp || latency > c.latencyP99MS
+		scaleDown := cpu < c.cpuDown && queueDepth < c.queueUp/10 && latency < c.latencyP99MS/10
 
 		if scaleUp && replicas < c.maxReplicas && time.Since(lastScale) > c.cooldown {
-			fmt.Printf("autoscaler: scale up %s %d->%d (queue=%.0f latency=%.0fms)\n", c.service, replicas, replicas+1, queueDepth, latency)
-			if err := scale(context.Background(), c.service, replicas+1); err != nil {
+			fmt.Printf("autoscaler: scale up %s %d->%d (cpu=%.1f%% queue=%.0f latency=%.0fms)\n", c.service, replicas, replicas+1, cpu, queueDepth, latency)
+			if err := scale(dctx, c.service, replicas+1); err != nil {
 				fmt.Fprintf(os.Stderr, "autoscaler: scale up: %v\n", err)
 			} else {
 				lastScale = time.Now()
 			}
 		} else if scaleDown && replicas > c.minReplicas && time.Since(lastScale) > c.cooldown {
 			fmt.Printf("autoscaler: scale down %s %d->%d\n", c.service, replicas, replicas-1)
-			if err := scale(context.Background(), c.service, replicas-1); err != nil {
+			if err := scale(dctx, c.service, replicas-1); err != nil {
 				fmt.Fprintf(os.Stderr, "autoscaler: scale down: %v\n", err)
 			} else {
 				lastScale = time.Now()
 			}
 		}
+		dcancel()
 		time.Sleep(c.poll)
 	}
 }
