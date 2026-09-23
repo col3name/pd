@@ -22,7 +22,8 @@
 | **Нет утечек ключей/ПДН в артефактах** | Логи без значений ПД, ключи хэшируются (sha256), в README только демо-ключи |
 | **Корректная обработка ошибок** | Понятные ответы: 400 (невалидный запрос), 401/403/404, 429 (rate limit), деградация при недоступности Redis/NER |
 | **Наличие/отсутствие демаскирования по системе** | `allow_unmask` per-system: аналитике запрещено, chat разрешено |
-| **Расширение списка ПДН без правки ядра** | Overlay-правила через конфиг (СНИЛС и т.п.), комбинации типов |
+
+[//]: # (| **Расширение списка ПДН без правки ядра** | Overlay-правила через конфиг &#40;СНИЛС и т.п.&#41;, комбинации типов |)
 
 ### Критерий 3.7 — Расширенные сценарии
 
@@ -387,46 +388,180 @@ span-ам, поэтому детерминированная: повторный
 Файл: `version2/configs/config.yaml`, флаг сервера `-config` (по умолчанию
 `configs/config.yaml`, относительно рабочей директории).
 
+### Полный пример с комментариями
+
 ```yaml
-port: 8080                  # HTTP-порт
-allow_unmask: true          # разрешить демаскирование по существующему payload_id
+# ── HTTP ────────────────────────────────────────────────────────────────
+port: 8080                  # HTTP-порт внутреннего сервиса (nginx проксирует :5173)
+allow_unmask: true          # глобально разрешить демаскирование по существующему payload_id
+
+# ── Store (хранилище соответствия token → значение) ────────────────────
 store:
   type: memory              # "memory" | "redis"
-  ttl_hours: 24             # TTL записей
-  capacity: 262144          # ёмкость in-memory LRU
+  ttl_hours: 24             # TTL записей (время жизни маски/токена)
+  capacity: 262144          # ёмкость in-memory LRU (FIFO-вытеснение при переполнении)
   redis_url: "redis://localhost:6379/0"   # только для store.type: redis
+
+# ── Маскирование (глобальный режим по умолчанию) ───────────────────────
 masking:
-  mode: redact              # "redact" | "token"
+  mode: redact              # "redact" | "token" | "synthetic"; per-system может переопределить
+
+# ── Контекстный confidence-resolver ────────────────────────────────────
 context:
-  enabled: true             # контекстный confidence-resolver
-  boost:                    # ключевые слова-усилители (тип: [слова])
+  enabled: true             # вкл/выкл контекстную корректировку уверенности
+  boost:                    # ключевые слова-усилители (тип: [слова]) → +0.2 за каждое
     "ФИО": [клиент, заёмщик, паспорт, держатель, анкета, указал]
     "АДРЕС": [адрес клиента, проживает, зарегистрирован]
-  penalty:                  # ключевые слова-штрафы (банк/филиал и т.п.)
+  penalty:                  # ключевые слова-штрафы → −0.3 за каждое
     "АДРЕС": [отделение, офис, банк]
     "ФИО": [поэт, писатель, написал]
+
+# ── Whitelist (известные не-ПД, никогда не маскируются) ────────────────
 whitelist:
-  enabled: true             # known non-PII, никогда не маскируются
+  enabled: true
   persons: [Александр Пушкин, Лев Толстой, Антон Чехов]
   addresses: [Красная площадь, отделение Альфа-Банка]
   organizations: [Альфа-Банк]
+
+# ── Resolve (приоритеты типов при пересечении span-ов) ─────────────────
 resolve:
-  priority:                 # приоритеты типов для resolve (выше = побеждает)
+  priority:                 # выше = побеждает при равной длине
     "КАРТА": 100
     "ПАСПОРТ": 95
     "ИНН": 40
+
+# ── NER (опциональная ML-модель, smart path) ───────────────────────────
 ml:
   enabled: false            # NER: https://github.com/yalue/onnxruntime_go
   model_path: ""            # rubert-tiny ONNX-модель + vocab + labels
   vocab_path: ""
   labels: [O, B-PER, I-PER, B-LOC, I-LOC, B-ORG, I-ORG]
-sensitive:                  # одиночный тип из списка маскируется только
-  - ПИН                    # при наличии другой ПД рядом
+
+# ── Sensitive-типы (одиночный тип маскируется только при другой ПД рядом) ─
+sensitive:
+  - ПИН
   - CVV
+
+# ── Rate limit (0 = выключено) ──────────────────────────────────────────
 rate_limit:
   rps: 0                    # 0 — выключено; иначе 429 при превышении
   burst: 0
+
+# ── Системы-потребители ────────────────────────────────────────────────
+# system="" (или не известное имя) -> поведение по умолчанию (глобальные настройки).
+systems:
+  - name: chat
+    api_key: "demo-chat-key"        # непустой => валидируется, если токен указан
+    enabled: true                    # false => 403
+    pii: [ФИО, ПАСПОРТ, ТЕЛЕФОН, EMAIL, КАРТА, ИНН, ДАТА]  # пусто = все типы
+    masking: token                   # "redact" | "token" | "synthetic"; пусто = глобальный
+    allow_unmask: true               # разрешено ли демаскирование
+    require_key: false               # true => токен обязателен (иначе 401)
+  - name: analytics
+    api_key: "demo-analytics-key"
+    enabled: true
+    pii: [ТЕЛЕФОН, EMAIL]            # аналитике недоступны ФИО/паспорт/карты
+    masking: redact
+    allow_unmask: false              # аналитике запрещено демаскирование
+  - name: external_llm
+    api_key: "demo-llm-key"
+    enabled: true
+    pii: []                          # пусто = маскировать все типы
+    masking: token
+    allow_unmask: false
+  - name: disabled_system
+    enabled: false                   # пример отключённой системы (403)
+    allow_unmask: false
+
+# ── PostgreSQL (системы, overlay-правила, комбинации, админка) ─────────
+database:
+  dsn: "postgres://pii:pii@localhost:5432/pii?sslmode=disable"
+
+# ── Админка (логин/пароль, seed в БД) ──────────────────────────────────
+admin:
+  login: "admin"
+  password: "admin123"
+
+# ── Overlay-правила (новые типы ПДН без правки ядра) ───────────────────
+# Требуют: type (имя), regex (go RE2) или capture (значение в group 1).
+rules:
+  - type: "СНИЛС"
+    regex: "\\d{3}-\\d{3}-\\d{3}\\s\\d{2}"
+    priority: 0
+    confidence: 0.99
+
+# ── Комбинации (тип маскируется только при наличии требуемых типов рядом) ─
+# Раскомментируйте, чтобы ПИН маскировался только рядом с картой.
+# combinations:
+#   - type: "ПИН"
+#     requires: ["КАРТА"]
+#     window: 80
 ```
+
+### Описание полей
+
+| Поле | Тип | По умолчанию | Описание |
+|------|-----|--------------|----------|
+| `port` | int | `8080` | HTTP-порт внутреннего сервиса |
+| `allow_unmask` | bool | `true` | Глобальное разрешение демаскирования |
+| `store.type` | string | `memory` | `memory` (in-process LRU) или `redis` |
+| `store.ttl_hours` | int | `24` | Время жизни записей маски/токена |
+| `store.capacity` | int | `262144` | Ёмкость in-memory LRU |
+| `store.redis_url` | string | — | URL Redis (только для `type: redis`) |
+| `masking.mode` | string | `redact` | Глобальный режим: `redact`/`token`/`synthetic` |
+| `context.enabled` | bool | `true` | Вкл/выкл контекстный confidence-resolver |
+| `context.boost` | map | defaults | Слова-усилители (+0.2) по типам |
+| `context.penalty` | map | defaults | Слова-штрафы (−0.3) по типам |
+| `whitelist.enabled` | bool | `true` | Вкл/выкл whitelist |
+| `whitelist.persons` | []string | — | Известные не-ПД персоны |
+| `whitelist.addresses` | []string | — | Известные не-ПД адреса |
+| `whitelist.organizations` | []string | — | Известные не-ПД организации |
+| `resolve.priority` | map | defaults | Приоритеты типов при пересечении |
+| `ml.enabled` | bool | `false` | Вкл/выкл NER-модель |
+| `ml.model_path` | string | — | Путь к ONNX-модели |
+| `ml.vocab_path` | string | — | Путь к vocab.txt |
+| `ml.labels` | []string | — | Метки NER |
+| `sensitive` | []Type | `[ПИН, CVV]` | Одиночный тип маскируется только при другой ПД рядом |
+| `rate_limit.rps` | float | `0` | RPS-лимит (0 = выключено) |
+| `rate_limit.burst` | float | `0` | Burst-размер |
+| `systems[]` | []System | — | Список систем-потребителей |
+| `database.dsn` | string | — | PostgreSQL DSN |
+| `admin.login` | string | `admin` | Логин админки |
+| `admin.password` | string | `admin123` | Пароль админки |
+| `rules[]` | []Rule | — | Overlay-правила (новые типы ПДН) |
+| `combinations[]` | []Combination | — | Комбинации типов (co-occurrence) |
+
+### Поля системы-потребителя (`systems[]`)
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `name` | string | Имя системы (поле `system` в `/process`) |
+| `api_key` | string | Ключ; валидируется, если токен указан |
+| `enabled` | bool | `false` → 403 |
+| `pii` | []Type | Какие типы ПД маскировать; пусто = все |
+| `masking` | string | `redact`/`token`/`synthetic`; пусто = глобальный |
+| `allow_unmask` | bool | Разрешено ли демаскирование |
+| `require_key` | bool | `true` → токен обязателен (иначе 401) |
+
+### Поля overlay-правила (`rules[]`)
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `type` | string | Имя нового типа ПДН (например `СНИЛС`) |
+| `regex` | string | Go RE2-паттерн прямого совпадения |
+| `context` | string | Regex, матчится в тексте перед span-ом |
+| `capture` | string | Regex со значением в group 1 (ключ + значение) |
+| `keyword` | string | Дешёвая проверка подстроки (для capture-правил) |
+| `priority` | int | Приоритет при пересечении |
+| `confidence` | float | Базовая уверенность (0–1) |
+
+### Поля комбинации (`combinations[]`)
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `type` | Type | Тип, который маскируется условно |
+| `requires` | []Type | Требуемые типы рядом |
+| `window` | int | Окно близости в байтах (0 = 80) |
 
 Env-overrides (побеждают YAML): `PORT`, `STORE` (`memory`|`redis`), `MASK_MODE`
 (`redact`|`token`). Обратите внимание: для `redis_url` env-переопределения нет
