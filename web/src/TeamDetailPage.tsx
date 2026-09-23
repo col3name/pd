@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, Cell, List, Section, Switch } from '@telegram-apps/telegram-ui';
+import { Button, Cell, Checkbox, List, Section, Switch } from '@telegram-apps/telegram-ui';
 import { api, type ConfigView, type SystemInfo } from './api';
 
 export default function TeamDetailPage() {
@@ -86,7 +86,7 @@ export default function TeamDetailPage() {
             <Cell
               key={t}
               subtitle={allEnabled || enabledSet.has(t) ? 'маскируется' : 'не маскируется'}
-              after={<Switch checked={allEnabled || enabledSet.has(t)} onChange={(e) => toggleType(t, e.target.checked)} />}
+              after={<Checkbox checked={allEnabled || enabledSet.has(t)} onChange={(e) => toggleType(t, e.target.checked)} />}
             >
               {t}
             </Cell>
