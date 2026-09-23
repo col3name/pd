@@ -29,6 +29,24 @@ var (
 	}, []string{"type"})
 )
 
+// QueueDepth is the current total depth of the worker-pool queues.
+var QueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "pii_queue_depth",
+	Help: "Current total depth of the worker-pool queues.",
+})
+
+// WorkersBusy is the number of workers currently processing a job.
+var WorkersBusy = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "pii_workers_busy",
+	Help: "Number of workers currently processing a job.",
+})
+
+// RedisUp is 1 when the Redis circuit breaker is closed, 0 when open.
+var RedisUp = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "pii_redis_up",
+	Help: "1 when Redis is reachable, 0 when the circuit breaker is open.",
+})
+
 // Handler returns the Prometheus metrics HTTP handler.
 func Handler() http.Handler {
 	return promhttp.Handler()
