@@ -122,7 +122,8 @@ func (h *Handler) PutConfig(w http.ResponseWriter, r *http.Request) {
 		cfg.Combinations = in.Combinations
 	}
 	if err := h.Mgr.Apply(cfg); err != nil {
-		http.Error(w, `{"error": "`+err.Error()+`"}`, http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, map[string]uint64{"rev": h.Mgr.Rev()})

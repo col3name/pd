@@ -43,6 +43,39 @@ func TestPutConfigRequiresAdminKey(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
+func TestPutConfigWrongAdminKey(t *testing.T) {
+	h := newConfigHandler(t)
+	body, _ := json.Marshal(map[string]any{"masking": "token"})
+	req := httptest.NewRequest(http.MethodPut, "/v1/config", bytes.NewReader(body))
+	req.Header.Set("X-Admin-Key", "nope")
+	rec := httptest.NewRecorder()
+	h.PutConfig(rec, req)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestPutConfigBadRuleRejected(t *testing.T) {
+	h := newConfigHandler(t)
+	body, _ := json.Marshal(map[string]any{"rules": []config.RuleConfig{{Type: "X", Regex: "("}}})
+	req := httptest.NewRequest(http.MethodPut, "/v1/config", bytes.NewReader(body))
+	req.Header.Set("X-Admin-Key", "pii-admin-key")
+	rec := httptest.NewRecorder()
+	h.PutConfig(rec, req)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	var resp map[string]string
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.NotEmpty(t, resp["error"])
+	// A quote in the regex must not break the JSON error body.
+	body2, _ := json.Marshal(map[string]any{"rules": []config.RuleConfig{{Type: "X", Regex: `["`}}})
+	req2 := httptest.NewRequest(http.MethodPut, "/v1/config", bytes.NewReader(body2))
+	req2.Header.Set("X-Admin-Key", "pii-admin-key")
+	rec2 := httptest.NewRecorder()
+	h.PutConfig(rec2, req2)
+	require.Equal(t, http.StatusBadRequest, rec2.Code)
+	var resp2 map[string]string
+	require.NoError(t, json.Unmarshal(rec2.Body.Bytes(), &resp2))
+	require.NotEmpty(t, resp2["error"])
+}
+
 func TestPutConfigApplies(t *testing.T) {
 	h := newConfigHandler(t)
 	body, _ := json.Marshal(map[string]any{"masking": "token"})
