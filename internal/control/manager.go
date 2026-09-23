@@ -97,6 +97,9 @@ func (m *Manager) buildLocked() error {
 	}
 	allRules := append(core, extra...)
 	d := detector.New(allRules, m.detectorOpts...)
+	m.detector = d
+	m.context = ctxR
+	m.whitelist = w
 	priority := m.cfg.Resolve.Priority
 	if priority == nil {
 		priority = copyPriority(resolve.DefaultPriority)
@@ -201,13 +204,6 @@ func (m *Manager) Limiter() *ratelimit.Limiter {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.limiter
-}
-
-// BuildOverlay compiles cfg.Rules into detector rules.
-func (m *Manager) BuildOverlay() ([]detector.Rule, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.buildOverlayRules()
 }
 
 func (m *Manager) buildOverlayRules() ([]detector.Rule, error) {
