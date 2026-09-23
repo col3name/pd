@@ -1,152 +1,273 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "graphTooltip": 1,
   "panels": [
     {
       "title": "RPS (requests/sec)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
       "targets": [
         {
           "expr": "sum(rate(pii_requests_total[1m]))",
-          "legendFormat": "RPS"
+          "legendFormat": "RPS",
+          "datasource": "Prometheus"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
     },
     {
       "title": "Latency P95 (seconds)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(pii_latency_seconds_bucket[1m])) by (le))",
-          "legendFormat": "P95"
+          "legendFormat": "P95",
+          "datasource": "Prometheus"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
     },
     {
       "title": "Errors (non-200)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
       "targets": [
         {
           "expr": "sum(rate(pii_requests_total{status!=\"200\"}[1m]))",
-          "legendFormat": "Errors"
+          "legendFormat": "Errors",
+          "datasource": "Prometheus"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
     },
     {
       "title": "Mask vs Unmask RPS",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
       "targets": [
         {
           "expr": "sum(rate(pii_requests_total{type=\"mask\"}[1m]))",
-          "legendFormat": "mask"
+          "legendFormat": "mask",
+          "datasource": "Prometheus"
         },
         {
           "expr": "sum(rate(pii_requests_total{type=\"unmask\"}[1m]))",
-          "legendFormat": "unmask"
+          "legendFormat": "unmask",
+          "datasource": "Prometheus"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
     },
     {
       "title": "Latency by type (P95)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(pii_latency_seconds_bucket{type=\"mask\"}[1m])) by (le))",
-          "legendFormat": "mask"
+          "legendFormat": "mask",
+          "datasource": "Prometheus"
         },
         {
           "expr": "histogram_quantile(0.95, sum(rate(pii_latency_seconds_bucket{type=\"unmask\"}[1m])) by (le))",
-          "legendFormat": "unmask"
+          "legendFormat": "unmask",
+          "datasource": "Prometheus"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
     },
     {
       "title": "PII detected by type",
       "type": "barchart",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 16 },
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
       "targets": [
         {
           "expr": "sum(pii_detected_total) by (type)",
-          "legendFormat": "{{type}}"
+          "legendFormat": "{{type}}",
+          "datasource": "Prometheus"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
     },
     {
       "title": "Requests by status",
       "type": "piechart",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 16 },
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
       "targets": [
         {
           "expr": "sum(pii_requests_total) by (status)",
-          "legendFormat": "{{status}}"
+          "legendFormat": "{{status}}",
+          "datasource": "Prometheus"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
     },
     {
       "title": "Go memory (heap in use)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 26 },
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 26
+      },
       "targets": [
         {
           "expr": "go_memstats_heap_inuse_bytes",
-          "legendFormat": "heap in use"
+          "legendFormat": "heap in use",
+          "datasource": "Prometheus"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      }
     },
     {
       "title": "Go goroutines",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 26 },
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 26
+      },
       "targets": [
         {
           "expr": "go_goroutines",
-          "legendFormat": "goroutines"
+          "legendFormat": "goroutines",
+          "datasource": "Prometheus"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
     },
     {
       "title": "Go GC duration (P95)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 26 },
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 26
+      },
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(go_gc_duration_seconds_bucket[1m])) by (le))",
-          "legendFormat": "GC P95"
+          "legendFormat": "GC P95",
+          "datasource": "Prometheus"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
     }
   ],
   "refresh": "5s",
   "schemaVersion": 39,
-  "tags": ["pii"],
-  "templating": { "list": [] },
-  "time": { "from": "now-15m", "to": "now" },
+  "tags": [
+    "pii"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "browser",
   "title": "PII Gateway",
