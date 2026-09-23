@@ -94,7 +94,7 @@ paths:
         "400":
           description: Нет payload_id, битый JSON или некорректный payload
         "401":
-          description: Неверный или отсутствующий X-API-Key для указанной системы
+          description: Неверный X-API-Key/access_token для указанной системы, либо отсутствует токен при require_key=true
         "403":
           description: "Система-потребитель отключена (enabled: false)"
         "404":

@@ -131,8 +131,10 @@ func (h *Handler) systemConfig(name string) *config.SystemConfig {
 }
 
 // authorize enforces the per-system API key via the X-API-Key header or the
-// access_token body field. Systems without a configured key are authorized
-// implicitly, unless require_key is set.
+// access_token body field. A missing token never blocks the request: the
+// method stays accessible and is processed normally. A provided token is
+// validated against the configured key (invalid -> 401). Only require_key=true
+// forces a valid token on every request.
 func (h *Handler) authorize(r *http.Request, s *config.SystemConfig, bodyToken string) error {
 	if s == nil {
 		return nil
@@ -147,6 +149,12 @@ func (h *Handler) authorize(r *http.Request, s *config.SystemConfig, bodyToken s
 		}
 		return nil
 	}
+	// No token provided -> allow access (implicit).
+	if key == "" {
+		return nil
+	}
+	// A token was provided: validate it. Systems without a configured key
+	// accept any token.
 	if s.APIKey == "" {
 		return nil
 	}

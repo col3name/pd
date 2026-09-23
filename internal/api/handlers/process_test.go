@@ -246,9 +246,12 @@ func TestProcessSystemAPIKey(t *testing.T) {
 		}
 	})
 
-	// Без ключа -> 401.
+	// Без ключа -> метод доступен и обрабатывается (200).
 	rec := doProcessSystem(t, h, "паспорт 4509 123456", "sys-5", "chat", "")
-	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp ProcessResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Contains(t, resp.Result, "[ПАСПОРТ]")
 
 	// Неверный ключ -> 401.
 	rec2 := doProcessSystem(t, h, "паспорт 4509 123456", "sys-5", "chat", "wrong")
@@ -286,9 +289,12 @@ func TestProcessSystemAccessTokenInBody(t *testing.T) {
 		}
 	})
 
-	// Без токена -> 401.
+	// Без токена -> метод доступен и обрабатывается (200).
 	rec := doProcessSystemBody(t, h, "паспорт 4509 123456", "tok-1", "chat", "")
-	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp ProcessResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Contains(t, resp.Result, "[ПАСПОРТ]")
 
 	// Неверный токен -> 401.
 	rec2 := doProcessSystemBody(t, h, "паспорт 4509 123456", "tok-1", "chat", "wrong")
