@@ -74,14 +74,14 @@ LLM, а затем демаскирует ответ по сохранённой
 
 **1. Отправить тестовый текст (маскирование):**
 ```bash
-curl -X POST http://localhost:5173/process -H 'Content-Type: application/json' \
+curl -X POST http://5.42.118.103:5173/process -H 'Content-Type: application/json' \
   -d '{"payload":"Клиент Иванов Иван Иванович, паспорт 4509 123456, тел +7 912 345-67-89, карта 4276 1234 5678 9012","payload_id":"demo-1"}'
 # → {"result":"Клиент [ФИО], паспорт [ПАСПОРТ], тел [ТЕЛЕФОН], карта [КАРТА]"}
 ```
 
 **2. Получить демаскированный результат (тот же payload_id + маска):**
 ```bash
-curl -X POST http://localhost:5173/process -H 'Content-Type: application/json' \
+curl -X POST http://5.42.118.103:5173/process -H 'Content-Type: application/json' \
   -d '{"payload":"Клиент [ФИО], паспорт [ПАСПОРТ], тел [ТЕЛЕФОН], карта [КАРТА]","payload_id":"demo-1"}'
 # → {"result":"Клиент Иванов Иван Иванович, паспорт 4509 123456, тел +7 912 345-67-89, карта 4276 1234 5678 9012"}
 ```
@@ -89,12 +89,12 @@ curl -X POST http://localhost:5173/process -H 'Content-Type: application/json' \
 **3. Логи:** `docker compose logs -f pii-module-v2` — структурированные (slog),
 без значений ПД (`payload_id`, `types`, `latency_ms`).
 
-**4. Метрики:** `http://localhost:5173/metrics` (Prometheus-формат) и Grafana
-`http://localhost:3000` (admin/admin) — дашборд «PII Gateway»
+**4. Метрики:** `http://5.42.118.103:5173/metrics` (Prometheus-формат) и Grafana
+`http://5.42.118.103:3000` (admin/admin) — дашборд «PII Gateway»
 (`/d/pii-gateway/pii-gateway`): RPS, latency P95, ошибки, mask/unmask,
 PII по типам, Go runtime.
 
-**5. Готовый сценарий:** `./scripts/curl_demo.sh http://localhost:5173`
+**5. Готовый сценарий:** `./scripts/curl_demo.sh http://5.42.118.103:5173`
 
 **Пайплайн (этапы, `internal/pipeline/pipeline.go`):**
 
@@ -227,19 +227,19 @@ docker compose up -d prometheus grafana
 
 Проверка:
 ```bash
-curl -X POST http://localhost:5173/process \
+curl -X POST http://5.42.118.103:5173/process \
   -H "Content-Type: application/json" \
   -d '{"payload":"паспорт 4509 123456, email test@example.com","payload_id":"test-1"}'
 # → {"result":"паспорт [ПАСПОРТ], email [EMAIL]"}
 
 # Демаскирование — тот же payload_id + наша маска возвращает оригинал байт-в-байт
-curl -X POST http://localhost:5173/process \
+curl -X POST http://5.42.118.103:5173/process \
   -H "Content-Type: application/json" \
   -d '{"payload":"паспорт [ПАСПОРТ], email [EMAIL]","payload_id":"test-1"}'
 # → {"result":"паспорт 4509 123456, email test@example.com"}
 
 # Идемпотентность: повтор прямого шага (та же исходная строка) возвращает ту же маску
-curl -X POST http://localhost:5173/process \
+curl -X POST http://5.42.118.103:5173/process \
   -H "Content-Type: application/json" \
   -d '{"payload":"паспорт 4509 123456, email test@example.com","payload_id":"test-1"}'
 # → {"result":"паспорт [ПАСПОРТ], email [EMAIL]"}
@@ -249,7 +249,7 @@ curl -X POST http://localhost:5173/process \
 демаскирование, системы с API-ключами, 401/403/404, ловушки, метрики):
 ```bash
 ./scripts/curl_demo.sh            # использует публичный URL по умолчанию
-./scripts/curl_demo.sh http://localhost:5173
+./scripts/curl_demo.sh http://5.42.118.103:5173
 ```
 
 **Примеры готовых запросов** — в `./scripts/curl_demo.sh` (15 шагов):
@@ -320,7 +320,7 @@ systems:
 
 Пример (chat, token-режим, с ключом):
 ```bash
-curl -X POST http://localhost:5173/process -H 'Content-Type: application/json' \
+curl -X POST http://5.42.118.103:5173/process -H 'Content-Type: application/json' \
   -H 'X-API-Key: demo-chat-key' \
   -d '{"payload":"Клиент Иванов Иван, тел +7 912 345-67-89","payload_id":"c-1","system":"chat"}'
 # {"result":"Клиент [PERSON_001], тел [PHONE_002]"}
@@ -445,18 +445,18 @@ bcrypt-хэш в таблице `admins`).
 
 ```bash
 # Вход
-TOKEN=$(curl -s -X POST http://localhost:5173/v1/auth/login \
+TOKEN=$(curl -s -X POST http://5.42.118.103:5173/v1/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"login":"admin","password":"admin123"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
 
 # Создать систему — ключ вернётся один раз
-curl -s -X POST http://localhost:5173/v1/systems \
+curl -s -X POST http://5.42.118.103:5173/v1/systems \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"chat","enabled":true,"allow_unmask":true,"masking":"token"}'
 # → {"access_key":"<32 hex>","name":"chat"}
 
 # Маскирование через /process с ключом системы
-curl -s -X POST http://localhost:5173/process \
+curl -s -X POST http://5.42.118.103:5173/process \
   -H "X-API-Key: <access_key>" \
   -d '{"payload":"паспорт 4509 123456","payload_id":"demo1","system":"chat"}'
 # → {"result":"паспорт [PASSPORT_001]"}
