@@ -43,16 +43,18 @@ func main() {
 
 	// Optional log file: write structured logs to a file (for admin download)
 	// in addition to stderr. Empty log_file keeps stderr-only logging.
+	// If the file can't be opened (e.g. read-only volume), fall back to stderr
+	// instead of crashing — the server must stay up.
 	var logFile *os.File
 	if cfg.LogFile != "" {
 		logFile, err = os.OpenFile(cfg.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if err != nil {
-			slog.Error("failed to open log file", "path", cfg.LogFile, "error", err)
-			os.Exit(1)
+			slog.Warn("failed to open log file; continuing with stderr only", "path", cfg.LogFile, "error", err)
+		} else {
+			defer logFile.Close()
+			multi := io.MultiWriter(os.Stderr, logFile)
+			slog.SetDefault(slog.New(slog.NewJSONHandler(multi, nil)))
 		}
-		defer logFile.Close()
-		multi := io.MultiWriter(os.Stderr, logFile)
-		slog.SetDefault(slog.New(slog.NewJSONHandler(multi, nil)))
 	}
 
 	ttl := time.Duration(cfg.Store.TTLHours) * time.Hour
