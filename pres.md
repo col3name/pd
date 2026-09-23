@@ -1,21 +1,3 @@
----
-marp: true
-theme: default
-paginate: true
-size: 16:9
-style: |
-  section {
-    font-size: 22px;
-    padding: 40px 60px;
-  }
-  h1 { font-size: 44px; color: #0f766e; }
-  h2 { font-size: 34px; color: #0f766e; }
-  h3 { font-size: 26px; color: #0f766e; }
-  table { font-size: 18px; }
-  code { font-size: 16px; }
-  pre { font-size: 15px; }
----
-
 # PII Gateway v2 (version2)
 
 Гибридный шлюз маскирования персональных данных (ПД): быстрые детерминированные правила +
@@ -25,8 +7,6 @@ style: |
 
 Проектировался под high-load: RPS 1000+ при latency < 100 ms, round-trip `POST /process`
 без потерь (демаскирование возвращает исходную строку байт-в-байт).
-
----
 
 ## Реализованные фичи
 
@@ -43,9 +23,7 @@ style: |
 | **Корректная обработка ошибок** | Понятные ответы: 400 (невалидный запрос), 401/403/404, 429 (rate limit), деградация при недоступности Redis/NER |
 | **Наличие/отсутствие демаскирования по системе** | `allow_unmask` per-system: аналитике запрещено, chat разрешено |
 
----
-
-## Реализованные фичи (продолжение)
+[//]: # (| **Расширение списка ПДН без правки ядра** | Overlay-правила через конфиг &#40;СНИЛС и т.п.&#41;, комбинации типов |)
 
 ### Критерий 3.7 — Расширенные сценарии
 
@@ -71,8 +49,6 @@ style: |
 | **Rate limiting** | Per-request лимит с `Retry-After` (429) |
 | **Swagger UI** | Интерактивная спецификация `/process` с кнопкой Try it out |
 
----
-
 ## Ссылки на сервисы
 
 | Сервис | URL |
@@ -87,11 +63,9 @@ style: |
 | Grafana | `http://5.42.118.103:3000` (admin/admin) |
 | Grafana-дашборд «PII Gateway» | `http://5.42.118.103:3000/d/pii-gateway/pii-gateway` |
 
----
-
 ## Архитектура
 
-![Архитектура PII Gateway](images/arch.png)
+![Архитектура PII Gateway](docs/images/arch.png)
 
 ```
 Система-потребитель / Жюри / LLM
@@ -120,8 +94,6 @@ LLM, а затем демаскирует ответ по сохранённой
 Критичные типы ПД определяются независимыми проверяемыми правилами, а не LLM,
 что даёт предсказуемость и высокий RPS.
 
----
-
 ## Все URL (единый внешний порт :5173)
 
 | URL | Назначение |
@@ -139,58 +111,6 @@ LLM, а затем демаскирует ответ по сохранённой
 | `http://5.42.118.103:3000` | Grafana (admin/admin) |
 | `http://5.42.118.103:3000/d/pii-gateway/pii-gateway` | Дашборд «PII Gateway» (RPS, latency, PII, Go runtime) |
 
----
-
-## Демо для жюри
-
-**1. Отправить тестовый текст (маскирование):**
-```bash
-curl -X POST http://5.42.118.103:5173/process -H 'Content-Type: application/json' \
-  -d '{"payload":"Клиент Иванов Иван Иванович, паспорт 4509 123456, тел +7 912 345-67-89, карта 4276 1234 5678 9012","payload_id":"demo-1"}'
-# → {"result":"Клиент [ФИО], паспорт [ПАСПОРТ], тел [ТЕЛЕФОН], карта [КАРТА]"}
-```
-
-**2. Получить демаскированный результат (тот же payload_id + маска):**
-```bash
-curl -X POST http://5.42.118.103:5173/process -H 'Content-Type: application/json' \
-  -d '{"payload":"Клиент [ФИО], паспорт [ПАСПОРТ], тел [ТЕЛЕФОН], карта [КАРТА]","payload_id":"demo-1"}'
-# → {"result":"Клиент Иванов Иван Иванович, паспорт 4509 123456, тел +7 912 345-67-89, карта 4276 1234 5678 9012"}
-```
-
-**3. Логи:** `docker compose logs -f pii-module-v2` — структурированные (slog),
-без значений ПД (`payload_id`, `types`, `latency_ms`).
-
-**4. Метрики:** `http://5.42.118.103:5173/metrics` (Prometheus-формат) и Grafana
-`http://5.42.118.103:3000` (admin/admin) — дашборд «PII Gateway»
-(`/d/pii-gateway/pii-gateway`): RPS, latency P95, ошибки, mask/unmask,
-PII по типам, Go runtime.
-
-**5. Готовый сценарий:** `./scripts/curl_demo.sh http://5.42.118.103:5173`
-
----
-
-## Пайплайн (этапы, `internal/pipeline/pipeline.go`)
-
-1. **Detect** — `internal/detector`: regex-правила + capture-правила с ключевыми словами,
-   опционально NER (только для «сомнительных» участков). Для каждого span — `Confidence`.
-2. **Эскалация дат** — обычная `ДАТА` (низкая уверенность, 0.7) повышается до
-   `ДАТА_РОЖДЕНИЯ` с confidence 1.0, если находится в пределах ~80 байт от «якоря» ПД
-   (ФИО, место рождения, адрес, паспорт). Это и есть исправление scorer-критики:
-   `указал: Иванов Иван Иванович, 12.03.1998` → `[ДАТА]`, при этом
-   `Банк открылся 12 марта 1998 года` не маскируется.
-3. **Resolve** — `internal/resolve`: снятие пересечений по приоритету типа
-   (КАРТА > ПАСПОРТ > … > ИНН), длине и позиции.
-4. **Whitelist** — `internal/whitelist`: известные не-ПД сущности (Пушкин, Толстой,
-   «отделение Альфа-Банка») блокируют маскирование независимо от детектора.
-5. **Context** — `internal/context`: ключевые слова-усилители (`клиент`, `заёмщик`,
-   `адрес регистрации`, …) поднимают confidence, слова-штрафы (`банк`, `филиал`,
-   `поэт`, …) опускают. ±100 байт вокруг span.
-6. **Gate** — порог 0.95: ниже — не маскируем. Одиночный «чувствительный» тип
-   (ПИН/CVV из `sensitive`) маскируется только при наличии другой ПД рядом.
-7. **Mask / Tokenize** — `internal/masker`: redact-режим → v1-плейсхолдеры `[КЛАСС]`,
-   token-режим → `[LABEL_NNN]` с обратимой картой `token → значение`.
-
----
 
 ## Как распознаются персональные данные
 
@@ -220,10 +140,6 @@ PII по типам, Go runtime.
 | `КОД_ПОДРАЗДЕЛЕНИЯ` | `\d{3}[-–]\d{3}` | |
 | `ДАТА_РОЖДЕНИЯ` | `\d{2}[./-]\d{2}[./-]\d{4}` и др. | требует контекст `родился/дата рождения` |
 | `ДАТА` | те же паттерны, confidence 0.7 | эскалируется в `ДАТА_РОЖДЕНИЯ` рядом с ПД |
-
----
-
-## Как распознаются ПД (продолжение)
 
 **Три вида правил:**
 - **`Re`** — прямое совпадение. Если задан `ContextRe`, он должен совпасть в
@@ -258,16 +174,13 @@ NER запускается **только для неоднозначных сл
 сливаются с rule-based через тот же resolver. При недоступности модели сервер
 стартует без неё (graceful degradation).
 
----
-
-## Как распознаются ПД (завершение)
-
 ### 4. Снятие пересечений (`internal/detector/span.go`)
 
 Все span-ы (regex + семантика + NER) проходят `ResolveOverlaps`: при пересечении
 побеждает **самый длинный**, при равной длине — **высший приоритет**, затем —
 ранний старт. Адреса детектируются до ФИО, и ФИО, пересекающееся с адресом,
 отбрасывается (улица не становится именем).
+
 
 ### 6. Whitelist (`internal/whitelist`)
 
@@ -292,8 +205,6 @@ NER запускается **только для неоднозначных сл
 | ФИО | Словарь имён/фамилий + контекст |
 | АДРЕС | Словарь городов + маркеры улиц + контекст |
 | ФИО, АДРЕС (неоднозначные) | NER (smart path, опционально) |
-
----
 
 ## Быстрый старт
 
@@ -341,45 +252,6 @@ health, маскирование/демаскирование, системы `c
 ошибки 401/403/404/400, ловушки (Пушкин, отделение банка, дата открытия, VIN),
 метрики и Swagger. Каждый шаг — готовый `curl` с комментарием, что ожидать.
 
----
-
-## Контракт API
-
-### `POST /process`
-
-Запрос:
-```json
-{ "payload": "строка", "payload_id": "идентификатор", "system": "chat" }
-```
-
-Ответ: `200` `{ "result": "строка" }`.
-
-Логика:
-- **Новый `payload_id`** → маскирование: `result` — это `Pipeline.Result.Masked`
-  (redact: `[КЛАСС]`, token: `[LABEL_NNN]`). Оригинал, маска и token-карта сохраняются в store.
-- **Существующий `payload_id`** (и `allow_unmask: true` для системы, см. «Системы-потребители»)
-  → корреляция по содержимому payload, эндпоинт идемпотентен (важно для ретраев нагрузочного теста):
-  - payload == сохранённый **оригинал** → это повтор прямого шага (маскирования): возвращается
-    **сохранённая маска** — ретраи не портят метрику маскирования.
-  - payload == сохранённая **маска** → это обратный шаг (демаскирования): возвращается
-    `store.Entry.Original`, т.е. исходная строка **байт-в-байт**, включая не-ПД подстроки.
-- Ответ всегда `{"result": "..."}`.
-
-### `GET /health`
-Возвращает `ok`.
-
-### `GET /metrics`
-Prometheus-метрики (см. «Метрики»).
-
-### `GET /docs` и `GET /openapi.yaml`
-- `/docs` — интерактивный Swagger UI: спецификация контракта `/process` с кнопкой
-  **Try it out** (можно вбить `payload`/`payload_id` и отправить запрос прямо со страницы).
-- `/openapi.yaml` (алиас `/process_api.yaml`) — сам файл спецификации OpenAPI 3, эмбеднут
-  в бинарь при сборке (источник — `process_api.yaml` в корне репозитория).
-- `/` — редирект на `/docs`.
-
----
-
 ## Системы-потребители
 
 Поведение модуля настраивается per-system через `config.yaml` — без правки кода.
@@ -406,17 +278,6 @@ systems:
     allow_unmask: false              # аналитике демаскирование запрещено
 ```
 
-Пример (chat, token-режим, с ключом):
-```bash
-curl -X POST http://5.42.118.103:5173/process -H 'Content-Type: application/json' \
-  -H 'X-API-Key: demo-chat-key' \
-  -d '{"payload":"Клиент Иванов Иван, тел +7 912 345-67-89","payload_id":"c-1","system":"chat"}'
-# {"result":"Клиент [PERSON_001], тел [PHONE_002]"}
-```
-
-Тот же запрос без токена тоже обрабатывается (200), а неверный токен → 401.
-
----
 
 ## Режимы маскирования
 
@@ -431,8 +292,6 @@ curl -X POST http://5.42.118.103:5173/process -H 'Content-Type: application/json
 span-ам, поэтому детерминированная: повторный прогон даёт те же токены. LLM можно
 передавать текст с токенами, а после ответа восстановить значения через карту
 `token → original`, сохранённую в store.
-
----
 
 ## Конфигурация
 
@@ -549,69 +408,6 @@ rules:
 #     window: 80
 ```
 
----
-
-## Конфигурация — описание полей
-
-| Поле | Тип | По умолчанию | Описание |
-|------|-----|--------------|----------|
-| `port` | int | `8080` | HTTP-порт внутреннего сервиса |
-| `allow_unmask` | bool | `true` | Глобальное разрешение демаскирования |
-| `store.type` | string | `memory` | `memory` (in-process LRU) или `redis` |
-| `store.ttl_hours` | int | `24` | Время жизни записей маски/токена |
-| `store.capacity` | int | `262144` | Ёмкость in-memory LRU |
-| `store.redis_url` | string | — | URL Redis (только для `type: redis`) |
-| `masking.mode` | string | `redact` | Глобальный режим: `redact`/`token`/`synthetic` |
-| `context.enabled` | bool | `true` | Вкл/выкл контекстный confidence-resolver |
-| `context.boost` | map | defaults | Слова-усилители (+0.2) по типам |
-| `context.penalty` | map | defaults | Слова-штрафы (−0.3) по типам |
-| `whitelist.enabled` | bool | `true` | Вкл/выкл whitelist |
-| `whitelist.persons` | []string | — | Известные не-ПД персоны |
-| `whitelist.addresses` | []string | — | Известные не-ПД адреса |
-| `whitelist.organizations` | []string | — | Известные не-ПД организации |
-| `resolve.priority` | map | defaults | Приоритеты типов при пересечении |
-| `ml.enabled` | bool | `false` | Вкл/выкл NER-модель |
-| `ml.model_path` | string | — | Путь к ONNX-модели |
-| `ml.vocab_path` | string | — | Путь к vocab.txt |
-| `ml.labels` | []string | — | Метки NER |
-| `sensitive` | []Type | `[ПИН, CVV]` | Одиночный тип маскируется только при другой ПД рядом |
-| `rate_limit.rps` | float | `0` | RPS-лимит (0 = выключено) |
-| `rate_limit.burst` | float | `0` | Burst-размер |
-| `systems[]` | []System | — | Список систем-потребителей |
-| `database.dsn` | string | — | PostgreSQL DSN |
-| `admin.login` | string | `admin` | Логин админки |
-| `admin.password` | string | `admin123` | Пароль админки |
-| `rules[]` | []Rule | — | Overlay-правила (новые типы ПДН) |
-| `combinations[]` | []Combination | — | Комбинации типов (co-occurrence) |
-
----
-
-## Конфигурация — системы, правила, комбинации
-
-### Поля системы-потребителя (`systems[]`)
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `name` | string | Имя системы (поле `system` в `/process`) |
-| `api_key` | string | Ключ; валидируется, если токен указан |
-| `enabled` | bool | `false` → 403 |
-| `pii` | []Type | Какие типы ПД маскировать; пусто = все |
-| `masking` | string | `redact`/`token`/`synthetic`; пусто = глобальный |
-| `allow_unmask` | bool | Разрешено ли демаскирование |
-| `require_key` | bool | `true` → токен обязателен (иначе 401) |
-
-### Поля overlay-правила (`rules[]`)
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `type` | string | Имя нового типа ПДН (например `СНИЛС`) |
-| `regex` | string | Go RE2-паттерн прямого совпадения |
-| `context` | string | Regex, матчится в тексте перед span-ом |
-| `capture` | string | Regex со значением в group 1 (ключ + значение) |
-| `keyword` | string | Дешёвая проверка подстроки (для capture-правил) |
-| `priority` | int | Приоритет при пересечении |
-| `confidence` | float | Базовая уверенность (0–1) |
-
 ### Поля комбинации (`combinations[]`)
 
 | Поле | Тип | Описание |
@@ -625,9 +421,7 @@ Env-overrides (побеждают YAML): `PORT`, `STORE` (`memory`|`redis`), `MA
 (Task 9): переключение на Redis из контейнера требует смонтированного YAML с
 `store.type: redis` и правильным `store.redis_url` (пример ниже).
 
----
-
-## Store: memory vs redis
+### Store: memory vs redis
 
 - **memory** (по умолчанию) — in-process bounded LRU с TTL и FIFO-вытеснением
   (`internal/store/memory.go`). Ноль внешних зависимостей, максимум RPS.
@@ -647,8 +441,6 @@ docker compose --profile redis up -d --build
 # и смонтировать конфиг: -v ./configs/config.redis.yaml:/srv/configs/config.yaml:ro
 ```
 
----
-
 ## Админка и управление системами (PostgreSQL)
 
 Системы-потребители, overlay-правила и комбинации хранятся в PostgreSQL
@@ -657,52 +449,13 @@ docker compose --profile redis up -d --build
 паролем (`config.Admin.Login`/`Password`, по умолчанию `admin`/`admin123`,
 bcrypt-хэш в таблице `admins`).
 
-| Эндпоинт | Метод | Описание |
-|----------|-------|----------|
-| `/v1/auth/login` | `POST` | Вход: `{"login","password"}` → `{"token"}`. |
-| `/v1/auth/logout` | `POST` | Выход (Bearer-токен). |
-| `/v1/systems` | `GET` | Список систем (`name`, `api_key_set`, `enabled`, `allow_unmask`, `masking`, `pii`). |
-| `/v1/systems` | `POST` | Создать систему → `{"name","access_key"}` (ключ показывается один раз). |
-| `/v1/systems/{name}` | `GET` | Одна система. |
-| `/v1/systems/{name}` | `PUT` | Обновить (`enabled`, `allow_unmask`, `masking`, `pii`) → `{"rev"}`. |
-| `/v1/systems/{name}` | `DELETE` | Удалить → `204`. |
-| `/v1/systems/{name}/regenerate-key` | `POST` | Новый access_key → `{"access_key"}`. |
-| `/v1/config` | `GET` | Read-only: `rev`, `masking`, `systems`, `rules`, `combinations`, `known_types`. |
-
-Все эндпоинты, кроме `/v1/auth/login`, требуют заголовок
-`Authorization: Bearer <token>`. CORS настраивается env `ADMIN_ORIGIN`
-(по умолчанию `*`).
-
----
-
-## Админка — пример
-
-Пример: создать систему и использовать её ключ в `/process`:
-
-```bash
-# Вход
-TOKEN=$(curl -s -X POST http://5.42.118.103:5173/v1/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"login":"admin","password":"admin123"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
-
-# Создать систему — ключ вернётся один раз
-curl -s -X POST http://5.42.118.103:5173/v1/systems \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"name":"chat","enabled":true,"allow_unmask":true,"masking":"token"}'
-# → {"access_key":"<32 hex>","name":"chat"}
-
-# Маскирование через /process с ключом системы
-curl -s -X POST http://5.42.118.103:5173/process \
-  -H "X-API-Key: <access_key>" \
-  -d '{"payload":"паспорт 4509 123456","payload_id":"demo1","system":"chat"}'
-# → {"result":"паспорт [PASSPORT_001]"}
-```
+![Админка — список команд](docs/images/admin-teams.png)
+![Админка — настройки ПД](docs/images/admin-teams-settings-pd.png)
+![Админка — дополнительные настройки](docs/images/admin-teams-settings-additional.png)
 
 Тот же механизм покрывает overlay-правила: новые типы ПДН (например, СНИЛС из
 `configs/config.yaml`) добавляются в `rules` без переписывания ядра. Готовая админка
 (SPA) — `web/` (Vite dev :5173 / nginx prod), поверх описанных эндпоинтов.
-
----
 
 ## NER (smart path, опционально)
 
@@ -710,27 +463,6 @@ curl -s -X POST http://5.42.118.103:5173/process \
 используется для неоднозначных случаев; при недоступности модели сервер стартует
 без неё (`slog.Warn`, graceful degradation). Всё остальное — rule-based и fast path.
 Для установки модели см. `scripts/setup_ner.sh` из v1.
-
----
-
-## Метрики (Prometheus)
-
-| Метрика | Тип | Описание |
-|---------|-----|----------|
-| `pii_requests_total{type,status}` | Counter | Запросы по направлению (mask/unmask) и статусу |
-| `pii_latency_seconds{type}` | Histogram | Latency запросов |
-| `pii_detected_total{type}` | Counter | Обнаружено ПД по типам |
-
-**Доступ:**
-- Сырые метрики: `http://5.42.118.103:5173/metrics` (Prometheus-формат).
-- Prometheus UI: `http://5.42.118.103:9090` (скрейпит `pii-module-v2:8080/metrics`).
-- Grafana: `http://5.42.118.103:3000` (admin/admin) — дашборд «PII Gateway»
-  (`/d/pii-gateway/pii-gateway`) с панелями RPS, latency P95, ошибки,
-  mask/unmask, PII по типам, Go runtime (heap, goroutines, GC).
-
-Логи — структурированные (slog), без значений ПД: `payload_id`, `types`, `latency_ms`.
-
----
 
 ## Производительность
 
@@ -760,10 +492,6 @@ $ go run ./cmd/bench -c 500 -d 10s
 total=395036 ok=395036 fail=0 rps=39449
 p50=11.582459ms p99=43.612541ms
 ```
-
----
-
-## Производительность — длинные тексты
 
 Длинные тексты (одна машина, сервер на ~7.7 CPU):
 
@@ -799,21 +527,6 @@ size      c    rps     p50      p99
 или сегментирование, а не больше конкурентности. Повторные прогоны одного сервера
 (store заполнен) дают те же цифры без деградации; демаскирование на 100k
 возвращает оригинал байт-в-байт.
-
----
-
-## Анти-паттерны (адversarial-кейсы)
-
-- `Александр Пушкин написал роман` — **не** маскируется (penalty + whitelist).
-- `Ближайшее отделение банка на ул. Тверская, 10` — **не** маскируется (penalty).
-- `адрес клиента: г. Москва, ул. Ленина, д. 10` — маскируется (boost «адрес клиента»).
-- `Введите пин 1234` — **не** маскируется (одиночный sensitive-тип).
-- `пин 1234, карта 4276 1234 5678 9012` — маскируется (co-occurrence).
-
-Accurancy-набор: `tests/pii_cases.json` + `tests/false_positives.json`, гоняется
-тестом `TestAccuracyDataset`.
-
----
 
 ## Тестирование
 
