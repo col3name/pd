@@ -147,9 +147,11 @@ export default function TeamDetailPage() {
         <Section header="Примеры использования">
           <Cell subtitle="curl — маскирование">
             <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{curlMask}</pre>
+            <Button size="s" onClick={() => copy(curlMask)}>Копировать</Button>
           </Cell>
           <Cell subtitle="fetch — маскирование">
             <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{fetchMask}</pre>
+            <Button size="s" onClick={() => copy(fetchMask)}>Копировать</Button>
           </Cell>
           <Cell subtitle="демаскирование — тот же запрос, но payload = результат маскирования, тот же payload_id">
             <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{`// повторный запрос с маской возвращает оригинал`}</pre>
