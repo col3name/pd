@@ -16,10 +16,15 @@ cd version2
 go run ./cmd/server
 
 # Docker (демон) — memory store, Redis не требуется
-docker compose up -d --build
+# 1. Скачать модель + vocab + ONNX Runtime
+./scripts/setup_ner.sh
 
-# Метрики и дашборды (Prometheus + Grafana)
-docker compose up -d prometheus grafana
+# 2. Собрать образ с NER
+docker build --build-arg WITH_NER=1 -t pii-module-v2 .
+
+# 3. Запустить с NER-конфигом
+WITH_NER=1 CONFIG_FILE=./configs/config.ner.yaml docker compose up -d --build
+
 ```
 
 Проверка:
