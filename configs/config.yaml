@@ -1,0 +1,64 @@
+# version2/configs/config.yaml
+port: 8080
+allow_unmask: true
+store:
+  type: memory          # "memory" | "redis"
+  ttl_hours: 24
+  capacity: 262144
+  redis_url: "redis://localhost:6379/0"
+masking:
+  mode: redact          # "redact" | "token"
+context:
+  enabled: true
+  boost:
+    "ФИО": [клиент, заёмщик, паспорт, держатель, анкета, указал]
+    "АДРЕС": [адрес клиента, проживает, зарегистрирован]
+  penalty:
+    "АДРЕС": [отделение, офис, банк]
+    "ФИО": [поэт, писатель, написал]
+whitelist:
+  enabled: true
+  persons: [Александр Пушкин, Лев Толстой, Антон Чехов]
+  addresses: [Красная площадь, отделение Альфа-Банка]
+  organizations: [Альфа-Банк]
+resolve:
+  priority:
+    "КАРТА": 100
+    "ПАСПОРТ": 95
+    "ИНН": 40
+ml:
+  enabled: false
+  model_path: ""
+  vocab_path: ""
+  labels: [O, B-PER, I-PER, B-LOC, I-LOC, B-ORG, I-ORG]
+sensitive:
+  - ПИН
+  - CVV
+rate_limit:
+  rps: 0
+  burst: 0
+
+# Системы-потребители: per-system типы ПД, режим маски и право на демаскирование.
+# system="" (или не известное имя) -> поведение по умолчанию (глобальные настройки).
+systems:
+  - name: chat
+    api_key: "demo-chat-key"
+    enabled: true
+    pii: [ФИО, ПАСПОРТ, ТЕЛЕФОН, EMAIL, КАРТА, ИНН, ДАТА]  # пусто = все типы
+    masking: token          # "redact" | "token"; пусто = глобальный mode
+    allow_unmask: true
+  - name: analytics
+    api_key: "demo-analytics-key"
+    enabled: true
+    pii: [ТЕЛЕФОН, EMAIL]   # аналитике недоступны ФИО/паспорт/карты
+    masking: redact
+    allow_unmask: false     # аналитике запрещено демаскирование
+  - name: external_llm
+    api_key: "demo-llm-key"
+    enabled: true
+    pii: []                 # пусто = маскировать все типы
+    masking: token
+    allow_unmask: false
+  - name: disabled_system
+    enabled: false
+    allow_unmask: false

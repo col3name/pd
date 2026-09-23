@@ -19,56 +19,63 @@ type Rule struct {
 	ContextRe *regexp.Regexp
 	CaptureRe *regexp.Regexp
 	Keyword   string
+	// Confidence is the base confidence set on every span the rule produces.
+	// Defaults to 1.0 (high confidence) when zero.
+	Confidence float32
 }
 
 // StructuredRules returns regex rules for structured PII types.
 func StructuredRules() []Rule {
 	return []Rule{
 		{TypePassport, regexp.MustCompile(`(?i)\b\d{2}\s?\d{2}\s\d{6}\b`), 2,
-			regexp.MustCompile(`(?i)(?:паспорт|серия\s+паспорта|паспорт\s+серия|серия\s+и\s+номер\s+паспорта)`), nil, "",
+			regexp.MustCompile(`(?i)(?:паспорт|серия\s+паспорта|паспорт\s+серия|серия\s+и\s+номер\s+паспорта)`), nil, "", 0,
 		},
-		{TypeINN, regexp.MustCompile(`(?i)\b\d{10,12}\b`), 0, nil, nil, ""},
-		{TypeCard, regexp.MustCompile(`(?i)\b\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\b`), 0, nil, nil, ""},
-		{TypeCVV, regexp.MustCompile(`(?i)\bcvv[:\s]*\d{3}\b`), 0, nil, nil, ""},
-		{TypePIN, regexp.MustCompile(`(?i)(?:^|\s)(?:пин|pin)[:\s]*\d{4}\b`), 0, nil, nil, ""},
-		{TypeEmail, regexp.MustCompile(`(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b`), 0, nil, nil, ""},
-		{TypePhone, regexp.MustCompile(`(?i)(?:\+7|\b8)[\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}`), 0, nil, nil, ""},
-		{TypeDeptCode, regexp.MustCompile(`(?i)\b\d{3}[-–]\d{3}\b`), 0, nil, nil, ""},
+		{TypeINN, regexp.MustCompile(`(?i)\b\d{10,12}\b`), 0, nil, nil, "", 0},
+		{TypeCard, regexp.MustCompile(`(?i)\b\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\b`), 0, nil, nil, "", 0},
+		{TypeCVV, regexp.MustCompile(`(?i)\bcvv[:\s]*\d{3}\b`), 0, nil, nil, "", 0},
+		{TypePIN, regexp.MustCompile(`(?i)(?:^|\s)(?:пин|pin)[:\s]*\d{4}\b`), 0, nil, nil, "", 0},
+		{TypeEmail, regexp.MustCompile(`(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b`), 0, nil, nil, "", 0},
+		{TypePhone, regexp.MustCompile(`(?i)(?:\+7|\b8)[\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}`), 0, nil, nil, "", 0},
+		{TypeDeptCode, regexp.MustCompile(`(?i)\b\d{3}[-–]\d{3}\b`), 0, nil, nil, "", 0},
 		{TypeDriverLicense, regexp.MustCompile(`(?i)\b\d{2}\s?\d{2}\s\d{6}\b`), 1,
-			regexp.MustCompile(`(?i)(?:водительское\s+удостоверение|в/у|удостоверение)`), nil, "",
+			regexp.MustCompile(`(?i)(?:водительское\s+удостоверение|в/у|удостоверение)`), nil, "", 0,
 		},
 		// Foreign passport: series 2 digits + number 7 digits.
 		{TypeForeignPassport, regexp.MustCompile(`(?i)\b\d{2}\s?\d{7}\b`), 2,
-			regexp.MustCompile(`(?i)(?:загранпаспорт|заграничный\s+паспорт)`), nil, "",
+			regexp.MustCompile(`(?i)(?:загранпаспорт|заграничный\s+паспорт)`), nil, "", 0,
 		},
 		// Military ID: series 2+2 digits + number 6 digits.
 		{TypeMilitaryID, regexp.MustCompile(`(?i)\b\d{2}\s?\d{2}\s\d{6}\b`), 2,
-			regexp.MustCompile(`(?i)(?:военный\s+билет|военник)`), nil, "",
+			regexp.MustCompile(`(?i)(?:военный\s+билет|военник)`), nil, "", 0,
 		},
 		// Birth certificate: series 2+2 digits + number 6 digits.
 		{TypeBirthCertificate, regexp.MustCompile(`(?i)\b\d{2}\s?\d{2}\s\d{6}\b`), 2,
-			regexp.MustCompile(`(?i)(?:свидетельство\s+о\s+рождении)`), nil, "",
+			regexp.MustCompile(`(?i)(?:свидетельство\s+о\s+рождении)`), nil, "", 0,
 		},
 		{TypeBirthDate, regexp.MustCompile(`(?i)\b\d{2}[./-]\d{2}[./-]\d{4}\b`), 0,
-			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, ""},
+			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, "", 0},
 		// Year-first date format: гггг.дд.мм or гггг-дд-мм.
 		{TypeBirthDate, regexp.MustCompile(`(?i)\b\d{4}[./-]\d{2}[./-]\d{2}\b`), 0,
-			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, ""},
+			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, "", 0},
+		// Generic date: matches any date; the pipeline escalates it to
+		// ДАТА_РОЖДЕНИЯ only when near other PII (see internal/pipeline).
+		{TypeDate, regexp.MustCompile(`(?i)\b\d{2}[./-]\d{2}[./-]\d{4}\b`), 0, nil, nil, "", 0.7},
+		{TypeDate, regexp.MustCompile(`(?i)\b\d{4}[./-]\d{2}[./-]\d{2}\b`), 0, nil, nil, "", 0.7},
 		// Text date: "15 марта 1990 года" or "пятнадцатого марта 1990 года".
 		{TypeBirthDate, regexp.MustCompile(`(?i)(?:^|\s)\d{1,2}\s+[а-яё]+\s+\d{4}\s+года(?:\s|[,.;]|$)`), 0,
-			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, ""},
+			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, "", 0},
 		{TypeBirthDate, regexp.MustCompile(`(?i)(?:^|\s)[а-яё]+\s+[а-яё]+\s+\d{4}\s+года(?:\s|[,.;]|$)`), 0,
-			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, ""},
+			regexp.MustCompile(`(?i)(?:дата\s+рождения|родился|родилась|родился\s+в|родилась\s+в|год\s+рождения|день\s+рождения)`), nil, "", 0},
 		// Context-dependent types: capture free text after a keyword.
 		{TypeBirthPlace, nil, 0, nil,
-			regexp.MustCompile(`(?i)(?:место\s+рождения|родил[а-я]+\s+в|родился\s+в|родилась\s+в)[:\s]+([^,;\n]{2,60})`), ""},
+			regexp.MustCompile(`(?i)(?:место\s+рождения|родил[а-я]+\s+в|родился\s+в|родилась\s+в)[:\s]+([^,;\n]{2,60})`), "", 0},
 		{TypeCitizenship, nil, 0, nil,
-			regexp.MustCompile(`(?i)(?:гражданство|гражданин|гражданка)[:\s]+([а-яё\s]{2,40})`), "граждан"},
+			regexp.MustCompile(`(?i)(?:гражданство|гражданин|гражданка)[:\s]+([а-яё\s]{2,40})`), "граждан", 0},
 		{TypeIssuer, nil, 0, nil,
-			regexp.MustCompile(`(?i)(?:выдан|выдал|орган\s+выдавший|кем\s+выдан)[:\s]+([^,.;\n]{3,80})`), "выд"},
+			regexp.MustCompile(`(?i)(?:выдан|выдал|орган\s+выдавший|кем\s+выдан)[:\s]+([^,.;\n]{3,80})`), "выд", 0},
 		{TypeAddress, nil, 0, nil,
-			regexp.MustCompile(`(?i)(?:адрес|проживает\s+по\s+адресу|проживает|зарегистрирован|прописан|место\s+жительства)[:\s]+((?:г\.|ул\.|д\.|кв\.|проспект|переулок|шоссе|бульвар|набережная|область|край|республика|район|поселок|деревня|село)[^,;]*(?:\s*,\s*(?:г\.|ул\.|д\.|кв\.|проспект|переулок|шоссе|бульвар|набережная|область|край|республика|район|поселок|деревня|село)[^,;]*)*)`), "адрес"},
+			regexp.MustCompile(`(?i)(?:адрес|проживает\s+по\s+адресу|проживает|зарегистрирован|прописан|место\s+жительства)[:\s]+((?:г\.|ул\.|д\.|кв\.|проспект|переулок|шоссе|бульвар|набережная|область|край|республика|район|поселок|деревня|село)[^,;]*(?:\s*,\s*(?:г\.|ул\.|д\.|кв\.|проспект|переулок|шоссе|бульвар|набережная|область|край|республика|район|поселок|деревня|село)[^,;]*)*)`), "адрес", 0},
 		{TypeCardholder, nil, 0, nil,
-			regexp.MustCompile(`(?i)(?:держатель\s+карты|cardholder|имя\s+держателя)[:\s]+([а-яё]{2,30}\s+[а-яё]{2,30})`), "держател"},
+			regexp.MustCompile(`(?i)(?:держатель\s+карты|cardholder|имя\s+держателя)[:\s]+([а-яё]{2,30}\s+[а-яё]{2,30})`), "держател", 0},
 	}
 }

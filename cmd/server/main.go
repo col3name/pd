@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -19,48 +20,86 @@ import (
 
 	"github.com/kind-earthquake/pii-module/internal/api/handlers"
 	"github.com/kind-earthquake/pii-module/internal/config"
+	pcontext "github.com/kind-earthquake/pii-module/internal/context"
 	"github.com/kind-earthquake/pii-module/internal/detector"
 	"github.com/kind-earthquake/pii-module/internal/ner"
 	"github.com/kind-earthquake/pii-module/internal/observability"
+	"github.com/kind-earthquake/pii-module/internal/pipeline"
 	"github.com/kind-earthquake/pii-module/internal/ratelimit"
 	"github.com/kind-earthquake/pii-module/internal/store"
+	"github.com/kind-earthquake/pii-module/internal/whitelist"
+	openapi "github.com/kind-earthquake/pii-module"
 )
 
 func main() {
-	cfg, err := config.Load()
+	configPath := flag.String("config", "configs/config.yaml", "path to the YAML config file")
+	flag.Parse()
+
+	cfg, err := config.Load(*configPath)
 	if err != nil {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
 
-	redisClient := redis.NewClient(redisOptions(cfg.RedisURL))
-	st := store.New(redisClient, cfg.StoreTTL)
+	ttl := time.Duration(cfg.Store.TTLHours) * time.Hour
+	var st store.Store
+	var redisClient *redis.Client
+	if cfg.Store.Type == "redis" {
+		redisClient = redis.NewClient(redisOptions(cfg.Store.RedisURL))
+		st = store.NewRedis(redisClient, ttl)
+	} else {
+		st = store.NewMemory(ttl, cfg.Store.Capacity)
+	}
+
+	var ctxR *pcontext.Resolver
+	if cfg.Context.Enabled {
+		ctxR = pcontext.New(cfg.Context.Boost, cfg.Context.Penalty)
+	} else {
+		ctxR = pcontext.New(nil, nil)
+	}
+
+	var w *whitelist.Whitelist
+	if cfg.Whitelist.Enabled {
+		w = whitelist.New(cfg.Whitelist.Persons, cfg.Whitelist.Addresses, cfg.Whitelist.Organizations)
+	}
 
 	detectorOpts := []detector.Option{}
 	var nerModel *ner.Model
-	if modelPath := os.Getenv("NER_MODEL_PATH"); modelPath != "" {
-		if vocabPath := os.Getenv("NER_VOCAB_PATH"); vocabPath != "" {
-			labels := []string{"O", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG"}
-			m, err := ner.NewModel(modelPath, vocabPath, labels, 128)
-			if err != nil {
-				slog.Warn("failed to load NER model; continuing without NER", "error", err)
-			} else {
-				nerModel = m
-				detectorOpts = append(detectorOpts, detector.WithNER(m))
-				slog.Info("NER model loaded", "model", modelPath)
-			}
+	if cfg.ML.Enabled && cfg.ML.ModelPath != "" && cfg.ML.VocabPath != "" {
+		labels := cfg.ML.Labels
+		if len(labels) == 0 {
+			labels = []string{"O", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG"}
+		}
+		m, err := ner.NewModel(cfg.ML.ModelPath, cfg.ML.VocabPath, labels, 128)
+		if err != nil {
+			slog.Warn("failed to load NER model; continuing without NER", "error", err)
+		} else {
+			nerModel = m
+			detectorOpts = append(detectorOpts, detector.WithNER(m))
+			slog.Info("NER model loaded", "model", cfg.ML.ModelPath)
 		}
 	}
 
+	p := pipeline.New(
+		detector.New(detector.StructuredRules(), detectorOpts...),
+		ctxR,
+		w,
+		cfg.Resolve.Priority,
+		pipeline.Options{
+			Mode:      cfg.Masking.Mode,
+			Sensitive: cfg.SensitiveTypes,
+		},
+	)
+
 	h := &handlers.Handler{
-		Detector: detector.New(detector.StructuredRules(), detectorOpts...),
+		Pipeline: p,
 		Store:    st,
 		Cfg:      cfg,
 	}
-	// Rate limiter: enabled only when RATE_LIMIT_RPS > 0.
-	if cfg.RateLimitRPS > 0 {
-		h.Limiter = ratelimit.New(cfg.RateLimitRPS, cfg.RateLimitBurst)
-		slog.Info("rate limiting enabled", "rps", cfg.RateLimitRPS, "burst", cfg.RateLimitBurst)
+	// Rate limiter: enabled only when rps > 0.
+	if cfg.RateLimit.RPS > 0 {
+		h.Limiter = ratelimit.New(cfg.RateLimit.RPS, cfg.RateLimit.Burst)
+		slog.Info("rate limiting enabled", "rps", cfg.RateLimit.RPS, "burst", cfg.RateLimit.Burst)
 	}
 
 	r := chi.NewRouter()
@@ -71,6 +110,13 @@ func main() {
 	})
 	r.Handle("/metrics", observability.Handler())
 	r.Post("/process", h.Process)
+	// OpenAPI: сама спецификация + интерактивный Swagger UI (Try it out).
+	r.Get("/openapi.yaml", openapi.SpecHandler())
+	r.Get("/process_api.yaml", openapi.SpecHandler())
+	r.Get("/docs", openapi.DocsHandler())
+	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
+		http.Redirect(w, req, "/docs", http.StatusFound)
+	})
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
@@ -95,6 +141,9 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
+	if redisClient != nil {
+		_ = redisClient.Close()
+	}
 	if nerModel != nil {
 		_ = nerModel.Close()
 	}

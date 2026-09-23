@@ -1,19 +1,25 @@
+# version2/docker-compose.yml
+# Default: pii-module-v2 runs with in-memory store, no Redis required.
+# To enable Redis mode, mount a config that sets store.type=redis and
+# store.redis_url (redis_url has no env override), then run with the redis
+# profile:
+#
+#   docker compose --profile redis up -d --build
+#
+# Example override for Redis:
+#   docker compose run --rm -e STORE=redis \
+#     -v ./configs/config.redis.yaml:/srv/configs/config.yaml:ro pii-module-v2
 services:
-  pii-module:
+  pii-module-v2:
     build: .
     ports:
       - "8080:8080"
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - STORE_TTL_HOURS=24
-      - ALLOW_UNMASK=true
-    depends_on:
-      - redis
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    profiles: ["redis"]
 
   prometheus:
     image: prom/prometheus:latest

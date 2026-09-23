@@ -47,3 +47,22 @@ func TestSpansFromLabels(t *testing.T) {
 	// "Иван Иванов" = 4×2 + 1 + 6×2 = 21 bytes.
 	require.Equal(t, 21, spans[0].End)
 }
+
+func TestMapLabelConfigurable(t *testing.T) {
+	// Default mapping: PER → ФИО.
+	typ, ok := mapLabel("B-PER")
+	require.True(t, ok)
+	require.Equal(t, detector.TypeFIO, typ)
+
+	// Custom mapping overrides the suffix map.
+	custom := map[string]detector.Type{
+		"PER": detector.TypeFIO,
+		"LOC": detector.TypeAddress,
+		"ORG": detector.TypeCardholder,
+	}
+	typ, ok = mapLabelWith("B-ORG", custom)
+	require.True(t, ok)
+	require.Equal(t, detector.TypeCardholder, typ)
+	_, ok = mapLabelWith("B-ORG", nil)
+	require.False(t, ok)
+}

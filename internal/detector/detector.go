@@ -148,6 +148,10 @@ func filterFIOOverlappingAddress(text string, fio, addresses []Span) []Span {
 
 // ruleSpans returns the spans produced by a single rule.
 func ruleSpans(text string, r Rule) []Span {
+	conf := r.Confidence
+	if conf == 0 {
+		conf = 1.0
+	}
 	if r.CaptureRe != nil {
 		// Cheap pre-check: if the keyword is absent, skip the expensive regex.
 		if r.Keyword != "" && !strings.Contains(strings.ToLower(text), r.Keyword) {
@@ -160,18 +164,22 @@ func ruleSpans(text string, r Rule) []Span {
 		if r.ContextRe != nil && !contextMatches(text, loc[0], r.ContextRe) {
 			continue
 		}
-		spans = append(spans, Span{Start: loc[0], End: loc[1], Type: r.Type, Priority: r.Priority, Confidence: 1.0})
+		spans = append(spans, Span{Start: loc[0], End: loc[1], Type: r.Type, Priority: r.Priority, Confidence: conf})
 	}
 	return spans
 }
 
 // captureSpans extracts spans from a CaptureRe rule's group 1 matches.
 func captureSpans(text string, r Rule) []Span {
+	conf := r.Confidence
+	if conf == 0 {
+		conf = 1.0
+	}
 	var spans []Span
 	for _, m := range r.CaptureRe.FindAllStringSubmatchIndex(text, -1) {
 		// m[2], m[3] are the bounds of group 1 (the captured value).
 		if len(m) >= 4 && m[2] >= 0 {
-			spans = append(spans, Span{Start: m[2], End: m[3], Type: r.Type, Priority: r.Priority, Confidence: 1.0})
+			spans = append(spans, Span{Start: m[2], End: m[3], Type: r.Type, Priority: r.Priority, Confidence: conf})
 		}
 	}
 	return spans

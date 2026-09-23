@@ -8,126 +8,155 @@ import (
 	"time"
 
 	"github.com/kind-earthquake/pii-module/internal/config"
-	"github.com/kind-earthquake/pii-module/internal/detector"
-	"github.com/kind-earthquake/pii-module/internal/masker"
 	"github.com/kind-earthquake/pii-module/internal/observability"
+	"github.com/kind-earthquake/pii-module/internal/pipeline"
 	"github.com/kind-earthquake/pii-module/internal/ratelimit"
 	"github.com/kind-earthquake/pii-module/internal/store"
 )
 
-// ProcessRequest is the /process request body.
 type ProcessRequest struct {
 	Payload   string `json:"payload"`
 	PayloadID string `json:"payload_id"`
+	System    string `json:"system"`
 }
 
-// ProcessResponse is the /process response body.
 type ProcessResponse struct {
 	Result string `json:"result"`
 }
 
-// Handler serves POST /process.
 type Handler struct {
-	Detector *detector.Detector
-	Store    *store.Store
+	Pipeline *pipeline.Pipeline
+	Store    store.Store
 	Cfg      *config.Config
 	Limiter  *ratelimit.Limiter
+}
+
+// systemPipeline returns the per-system pipeline. The second return value is
+// true when the system resolves to a pipeline (enabled and known).
+func (h *Handler) systemPipeline(name string) (*pipeline.Pipeline, bool) {
+	if name == "" {
+		return h.Pipeline, true
+	}
+	for i := range h.Cfg.Systems {
+		s := &h.Cfg.Systems[i]
+		if s.Name != name {
+			continue
+		}
+		if !s.Enabled {
+			return nil, false
+		}
+		mode := s.Masking
+		if mode == "" {
+			mode = h.Cfg.Masking.Mode
+		}
+		return pipeline.New(
+			h.Pipeline.Detector(),
+			h.Pipeline.Context(),
+			h.Pipeline.Whitelist(),
+			h.Pipeline.Priority(),
+			pipeline.Options{
+				Mode:            mode,
+				Sensitive:       h.Cfg.SensitiveTypes,
+				ProximityWindow: h.Pipeline.ProximityWindow(),
+				Gate:            h.Pipeline.Gate(),
+				AllowedTypes:    s.PII,
+			},
+		), true
+	}
+	return h.Pipeline, true
 }
 
 // Process handles masking (new payload_id) and unmasking (existing payload_id).
 func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-
-	// Rate limit: return 429 with Retry-After when the bucket is empty.
 	if h.Limiter != nil {
 		if ok, retryAfter := h.Limiter.Allow(); !ok {
 			w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
 			observability.RequestsTotal.WithLabelValues("mask", "429").Inc()
-			slog.Warn("process: rate limited", "retry_after_s", retryAfter.Seconds())
 			return
 		}
 	}
-
 	var req ProcessRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		slog.Warn("process: invalid request body", "error", err)
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 	if req.PayloadID == "" {
-		slog.Warn("process: missing payload_id")
 		http.Error(w, "payload_id is required", http.StatusBadRequest)
 		return
 	}
 
-	// Unmask path: existing payload_id.
-	if h.Cfg.AllowUnmask {
-		if original, ok, err := h.Store.Get(r.Context(), req.PayloadID); err == nil && ok {
-			writeResult(w, ProcessResponse{Result: original})
-			observability.RequestsTotal.WithLabelValues("unmask", "200").Inc()
+	// System authorization: unknown system -> 404, disabled -> 403, bad key -> 401.
+	system := h.systemConfig(req.System)
+	if req.System != "" && system == nil {
+		http.Error(w, "unknown system", http.StatusNotFound)
+		return
+	}
+	if system != nil && !system.Enabled {
+		http.Error(w, "system disabled", http.StatusForbidden)
+		return
+	}
+	if err := h.authorize(r, system); err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	allowUnmask := h.Cfg.AllowUnmask
+	if system != nil {
+		allowUnmask = system.AllowUnmask
+	}
+	if allowUnmask {
+		if e, ok, err := h.Store.Get(r.Context(), req.PayloadID); err == nil && ok {
+			writeResult(w, ProcessResponse{Result: e.Original})
 			observability.RequestLatency.WithLabelValues("unmask").Observe(time.Since(start).Seconds())
-			slog.Info("process: unmasked", "payload_id", req.PayloadID, "latency_ms", time.Since(start).Milliseconds())
+			slog.Info("process: unmasked", "payload_id", req.PayloadID, "system", req.System, "latency_ms", time.Since(start).Milliseconds())
 			return
 		}
 	}
-
-	// Mask path: detect, mask, save original.
-	spans := h.gateSpans(req.Payload, h.Detector.Detect(req.Payload))
-	// Co-occurrence rule: a lone sensitive type (e.g. PIN without a card
-	// number) is not masked.
-	if len(spans) == 1 && h.isSensitive(spans[0].Type) {
-		spans = nil
+	p, ok := h.systemPipeline(req.System)
+	if !ok {
+		http.Error(w, "system disabled", http.StatusForbidden)
+		return
 	}
-	masked := masker.Mask(req.Payload, spans)
-	types := make([]string, 0, len(spans))
-	for _, s := range spans {
-		types = append(types, string(s.Type))
-		observability.DetectedTotal.WithLabelValues(string(s.Type)).Inc()
+	res := p.Process(req.Payload)
+	for _, t := range res.Types {
+		observability.DetectedTotal.WithLabelValues(t).Inc()
 	}
-	if err := h.Store.Save(r.Context(), req.PayloadID, req.Payload); err != nil {
-		// Degrade gracefully: masking still works, unmask will fail-open.
+	if err := h.Store.Save(r.Context(), req.PayloadID, store.Entry{Original: req.Payload, Tokens: res.Tokens}); err != nil {
 		slog.Warn("process: store save failed", "payload_id", req.PayloadID, "error", err)
 	}
-	writeResult(w, ProcessResponse{Result: masked})
-	observability.RequestsTotal.WithLabelValues("mask", "200").Inc()
+	writeResult(w, ProcessResponse{Result: res.Masked})
 	observability.RequestLatency.WithLabelValues("mask").Observe(time.Since(start).Seconds())
-	slog.Info("process: masked", "payload_id", req.PayloadID, "types", types, "latency_ms", time.Since(start).Milliseconds())
+	slog.Info("process: masked", "payload_id", req.PayloadID, "system", req.System, "types", res.Types, "latency_ms", time.Since(start).Milliseconds())
+}
+
+// systemConfig looks up a consumer system by name (nil if absent).
+func (h *Handler) systemConfig(name string) *config.SystemConfig {
+	if name == "" {
+		return nil
+	}
+	for i := range h.Cfg.Systems {
+		if h.Cfg.Systems[i].Name == name {
+			return &h.Cfg.Systems[i]
+		}
+	}
+	return nil
+}
+
+// authorize enforces the per-system API key via the X-API-Key header. Systems
+// without a configured key are authorized implicitly.
+func (h *Handler) authorize(r *http.Request, s *config.SystemConfig) error {
+	if s == nil || s.APIKey == "" {
+		return nil
+	}
+	if r.Header.Get("X-API-Key") == s.APIKey {
+		return nil
+	}
+	return config.ErrUnauthorized
 }
 
 func writeResult(w http.ResponseWriter, resp ProcessResponse) {
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		slog.Error("failed to encode response", "error", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-	}
-}
-
-// isSensitive reports whether t is a sensitive type that requires co-occurrence
-// with another PII type to be masked.
-func (h *Handler) isSensitive(t detector.Type) bool {
-	for _, s := range h.Cfg.SensitiveTypes {
-		if s == t {
-			return true
-		}
-	}
-	return false
-}
-
-// gateSpans filters spans by the 3-threshold confidence model.
-func (h *Handler) gateSpans(text string, spans []detector.Span) []detector.Span {
-	var kept []detector.Span
-	for _, s := range spans {
-		switch {
-		case s.Confidence >= 0.95:
-			kept = append(kept, s)
-		case s.Confidence >= 0.75:
-			if detector.HasContext(text, s.Start, s.End, s.Type) {
-				kept = append(kept, s)
-			}
-		default:
-			// below 0.75 → drop
-		}
-	}
-	return kept
+	_ = json.NewEncoder(w).Encode(resp)
 }

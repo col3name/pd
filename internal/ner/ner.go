@@ -2,9 +2,25 @@ package ner
 
 import (
 	"strings"
+	"sync/atomic"
 
 	"github.com/kind-earthquake/pii-module/internal/detector"
 )
+
+// typeByLabelPtr is the default NER label-suffix → PII type mapping.
+// SetTypeByLabel replaces it (config-driven); call it before serving requests.
+// Stored behind an atomic.Pointer because SpansFromLabels runs on parallel
+// goroutines in the detector smart path (detectParallel).
+var typeByLabelPtr atomic.Pointer[map[string]detector.Type]
+
+var defaultTypeByLabel = map[string]detector.Type{
+	"PER": detector.TypeFIO,
+	"LOC": detector.TypeAddress,
+}
+
+func init() {
+	typeByLabelPtr.Store(&defaultTypeByLabel)
+}
 
 // NER maps token-level label predictions to PII spans.
 type NER struct {
@@ -54,16 +70,26 @@ func (n *NER) SpansFromLabels(text string, tokens []Token, labelIDs []int) []det
 	return spans
 }
 
-// mapLabel converts a BERT NER label to a PII type. Returns false for labels
-// that are not directly PII (O, ORG, etc.).
+// mapLabel converts a BERT NER label to the default PII type. Returns false for
+// labels that are not directly PII (O, ORG, etc. by default).
 func mapLabel(label string) (detector.Type, bool) {
+	return mapLabelWith(label, *typeByLabelPtr.Load())
+}
+
+// mapLabelWith converts label against an explicit suffix map. A nil/empty map
+// returns false.
+func mapLabelWith(label string, m map[string]detector.Type) (detector.Type, bool) {
 	label = strings.ToUpper(label)
-	switch {
-	case strings.HasSuffix(label, "PER"):
-		return detector.TypeFIO, true
-	case strings.HasSuffix(label, "LOC"):
-		return detector.TypeAddress, true
-	default:
-		return "", false
+	for suffix, typ := range m {
+		if strings.HasSuffix(label, suffix) {
+			return typ, true
+		}
 	}
+	return "", false
+}
+
+// SetTypeByLabel atomically replaces the default label→PII mapping.
+// Call once at startup before serving requests.
+func SetTypeByLabel(m map[string]detector.Type) {
+	typeByLabelPtr.Store(&m)
 }

@@ -3,4 +3,4 @@ global:
 scrape_configs:
   - job_name: pii-module
     static_configs:
-      - targets: ["pii-module:8080"]
+      - targets: ["pii-module-v2:8080"]

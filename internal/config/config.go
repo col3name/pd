@@ -1,81 +1,138 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
-	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/kind-earthquake/pii-module/internal/detector"
+	"github.com/kind-earthquake/pii-module/internal/resolve"
 )
 
-// Config holds module configuration loaded from environment.
+// ErrUnauthorized is returned when a system API key does not match.
+var ErrUnauthorized = errors.New("unauthorized")
+
+// MaskingConfig controls redact/token behavior.
+type MaskingConfig struct {
+	Mode string `yaml:"mode"` // "redact" | "token"
+}
+
+// StoreConfig controls the payload store.
+type StoreConfig struct {
+	Type     string `yaml:"type"` // "memory" | "redis"
+	TTLHours int    `yaml:"ttl_hours"`
+	Capacity int    `yaml:"capacity"`
+	RedisURL string `yaml:"redis_url"`
+}
+
+// ContextConfig tunes the context resolver keywords (nil maps → defaults).
+type ContextConfig struct {
+	Enabled bool                      `yaml:"enabled"`
+	Boost   map[detector.Type][]string `yaml:"boost"`
+	Penalty map[detector.Type][]string `yaml:"penalty"`
+}
+
+// WhitelistConfig lists non-PII entries.
+type WhitelistConfig struct {
+	Enabled       bool     `yaml:"enabled"`
+	Persons       []string `yaml:"persons"`
+	Addresses     []string `yaml:"addresses"`
+	Organizations []string `yaml:"organizations"`
+}
+
+// ResolveConfig holds type priorities.
+type ResolveConfig struct {
+	Priority map[detector.Type]int `yaml:"priority"`
+}
+
+// MLConfig controls the optional NER model.
+type MLConfig struct {
+	Enabled   bool     `yaml:"enabled"`
+	ModelPath string   `yaml:"model_path"`
+	VocabPath string   `yaml:"vocab_path"`
+	Labels    []string `yaml:"labels"`
+}
+
+// RateLimitConfig controls the token-bucket limiter (0 disables).
+type RateLimitConfig struct {
+	RPS   float64 `yaml:"rps"`
+	Burst float64 `yaml:"burst"`
+}
+
+// SystemConfig describes a consumer system: which PII types to mask, the
+// masking mode, and whether unmasking is allowed for that system.
+type SystemConfig struct {
+	Name        string          `yaml:"name"`
+	APIKey      string          `yaml:"api_key"` // non-empty => require X-API-Key
+	Enabled     bool            `yaml:"enabled"` // false => system rejected (403)
+	PII         []detector.Type `yaml:"pii"`     // empty => all supported types
+	Masking     string          `yaml:"masking"` // "redact" | "token"; empty => global
+	AllowUnmask bool            `yaml:"allow_unmask"`
+}
+
+// Config is the version2 runtime configuration.
 type Config struct {
-	Port        int
-	RedisURL    string
-	StoreTTL    time.Duration
-	AllowUnmask bool
-	MaskTypes   []detector.Type
-	// SensitiveTypes are masked only when another PII type is also present
-	// (co-occurrence rule). A lone sensitive value (e.g. a PIN without a card
-	// number) is left unmasked.
-	SensitiveTypes []detector.Type
-	// RateLimitRPS is the max requests per second before 429 is returned.
-	// 0 disables rate limiting.
-	RateLimitRPS float64
-	// RateLimitBurst is the token-bucket burst capacity.
-	RateLimitBurst float64
+	Port           int            `yaml:"port"`
+	AllowUnmask    bool           `yaml:"allow_unmask"`
+	Store          StoreConfig    `yaml:"store"`
+	Masking        MaskingConfig  `yaml:"masking"`
+	Context        ContextConfig  `yaml:"context"`
+	Whitelist      WhitelistConfig `yaml:"whitelist"`
+	Resolve        ResolveConfig  `yaml:"resolve"`
+	ML             MLConfig       `yaml:"ml"`
+	RateLimit      RateLimitConfig `yaml:"rate_limit"`
+	SensitiveTypes []detector.Type `yaml:"sensitive"`
+	Systems        []SystemConfig `yaml:"systems"`
 }
 
-func env(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+// Default returns the v1-compatible default configuration.
+func Default() *Config {
+	// Deep-copy the package-global priority map: yaml.Unmarshal writes into an
+	// existing map in place, so sharing resolve.DefaultPriority would corrupt
+	// the global used by resolve.Resolve and every subsequent Default().
+	priority := make(map[detector.Type]int, len(resolve.DefaultPriority))
+	for k, v := range resolve.DefaultPriority {
+		priority[k] = v
 	}
-	return fallback
+	return &Config{
+		Port:        8080,
+		AllowUnmask: true,
+		Store:       StoreConfig{Type: "memory", TTLHours: 24, Capacity: 1 << 18},
+		Masking:     MaskingConfig{Mode: "redact"},
+		Context:     ContextConfig{Enabled: true},
+		Whitelist:   WhitelistConfig{Enabled: true},
+		Resolve:     ResolveConfig{Priority: priority},
+		SensitiveTypes: []detector.Type{detector.TypePIN, detector.TypeCVV},
+	}
 }
 
-// Load returns configuration with defaults and environment overrides.
-func Load() (*Config, error) {
-	cfg := &Config{}
-	cfg.Port = 8080
+// Load reads the YAML file at path on top of Default() and applies env overrides.
+func Load(path string) (*Config, error) {
+	cfg := Default()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		return nil, err
+	}
+	applyEnv(cfg)
+	return cfg, nil
+}
+
+func applyEnv(cfg *Config) {
 	if v := os.Getenv("PORT"); v != "" {
 		var p int
 		if _, err := fmt.Sscanf(v, "%d", &p); err == nil {
 			cfg.Port = p
 		}
 	}
-	cfg.RedisURL = env("REDIS_URL", "redis://localhost:6379/0")
-	cfg.StoreTTL = 24 * time.Hour
-	if v := os.Getenv("STORE_TTL_HOURS"); v != "" {
-		var h int
-		if _, err := fmt.Sscanf(v, "%d", &h); err == nil && h > 0 {
-			cfg.StoreTTL = time.Duration(h) * time.Hour
-		}
+	if v := os.Getenv("STORE"); v != "" {
+		cfg.Store.Type = v
 	}
-	cfg.AllowUnmask = env("ALLOW_UNMASK", "true") != "false"
-	cfg.MaskTypes = []detector.Type{
-		detector.TypeFIO, detector.TypeBirthDate, detector.TypeBirthPlace,
-		detector.TypePassport, detector.TypeCitizenship, detector.TypeIssuer,
-		detector.TypeDeptCode, detector.TypePassportIssue, detector.TypeDriverLicense,
-		detector.TypeAddress, detector.TypeEmail, detector.TypePhone,
-		detector.TypeINN, detector.TypeCard, detector.TypeCVV,
-		detector.TypePIN, detector.TypeCardholder,
+	if v := os.Getenv("MASK_MODE"); v != "" {
+		cfg.Masking.Mode = v
 	}
-	// PIN and CVV are masked only when another PII type is present.
-	cfg.SensitiveTypes = []detector.Type{detector.TypePIN, detector.TypeCVV}
-	// Rate limiting: default 0 (disabled). Enable via RATE_LIMIT_RPS.
-	cfg.RateLimitRPS = envFloat("RATE_LIMIT_RPS", 0)
-	cfg.RateLimitBurst = envFloat("RATE_LIMIT_BURST", cfg.RateLimitRPS)
-	return cfg, nil
-}
-
-func envFloat(key string, fallback float64) float64 {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback
-	}
-	var f float64
-	if _, err := fmt.Sscanf(v, "%f", &f); err == nil && f > 0 {
-		return f
-	}
-	return fallback
 }
