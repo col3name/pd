@@ -29,7 +29,7 @@ type StoreConfig struct {
 
 // ContextConfig tunes the context resolver keywords (nil maps → defaults).
 type ContextConfig struct {
-	Enabled bool                      `yaml:"enabled"`
+	Enabled bool                       `yaml:"enabled"`
 	Boost   map[detector.Type][]string `yaml:"boost"`
 	Penalty map[detector.Type][]string `yaml:"penalty"`
 }
@@ -61,6 +61,29 @@ type RateLimitConfig struct {
 	Burst float64 `yaml:"burst"`
 }
 
+// AdminConfig guards config writes (PUT /v1/config).
+type AdminConfig struct {
+	Key string `yaml:"key"`
+}
+
+// RuleConfig is a user-defined PII detection rule (overlay on top of core).
+type RuleConfig struct {
+	Type       string  `yaml:"type"`
+	Regex      string  `yaml:"regex"`
+	Priority   int     `yaml:"priority"`
+	Context    string  `yaml:"context"` // regex matched in text before the span
+	Capture    string  `yaml:"capture"` // regex with the span value in group 1
+	Keyword    string  `yaml:"keyword"` // cheap substring pre-check (capture rules)
+	Confidence float32 `yaml:"confidence"`
+}
+
+// CombinationConfig links a sensitive type to required co-occurring types.
+type CombinationConfig struct {
+	Type     detector.Type   `yaml:"type"`
+	Requires []detector.Type `yaml:"requires"`
+	Window   int             `yaml:"window"` // byte proximity
+}
+
 // SystemConfig describes a consumer system: which PII types to mask, the
 // masking mode, and whether unmasking is allowed for that system.
 type SystemConfig struct {
@@ -74,17 +97,20 @@ type SystemConfig struct {
 
 // Config is the version2 runtime configuration.
 type Config struct {
-	Port           int            `yaml:"port"`
-	AllowUnmask    bool           `yaml:"allow_unmask"`
-	Store          StoreConfig    `yaml:"store"`
-	Masking        MaskingConfig  `yaml:"masking"`
-	Context        ContextConfig  `yaml:"context"`
-	Whitelist      WhitelistConfig `yaml:"whitelist"`
-	Resolve        ResolveConfig  `yaml:"resolve"`
-	ML             MLConfig       `yaml:"ml"`
-	RateLimit      RateLimitConfig `yaml:"rate_limit"`
-	SensitiveTypes []detector.Type `yaml:"sensitive"`
-	Systems        []SystemConfig `yaml:"systems"`
+	Port           int                 `yaml:"port"`
+	AllowUnmask    bool                `yaml:"allow_unmask"`
+	Store          StoreConfig         `yaml:"store"`
+	Masking        MaskingConfig       `yaml:"masking"`
+	Context        ContextConfig       `yaml:"context"`
+	Whitelist      WhitelistConfig     `yaml:"whitelist"`
+	Resolve        ResolveConfig       `yaml:"resolve"`
+	ML             MLConfig            `yaml:"ml"`
+	RateLimit      RateLimitConfig     `yaml:"rate_limit"`
+	SensitiveTypes []detector.Type     `yaml:"sensitive"`
+	Systems        []SystemConfig      `yaml:"systems"`
+	Admin          AdminConfig         `yaml:"admin"`
+	Rules          []RuleConfig        `yaml:"rules"`
+	Combinations   []CombinationConfig `yaml:"combinations"`
 }
 
 // Default returns the v1-compatible default configuration.
@@ -97,14 +123,15 @@ func Default() *Config {
 		priority[k] = v
 	}
 	return &Config{
-		Port:        8080,
-		AllowUnmask: true,
-		Store:       StoreConfig{Type: "memory", TTLHours: 24, Capacity: 1 << 18},
-		Masking:     MaskingConfig{Mode: "redact"},
-		Context:     ContextConfig{Enabled: true},
-		Whitelist:   WhitelistConfig{Enabled: true},
-		Resolve:     ResolveConfig{Priority: priority},
+		Port:           8080,
+		AllowUnmask:    true,
+		Store:          StoreConfig{Type: "memory", TTLHours: 24, Capacity: 1 << 18},
+		Masking:        MaskingConfig{Mode: "redact"},
+		Context:        ContextConfig{Enabled: true},
+		Whitelist:      WhitelistConfig{Enabled: true},
+		Resolve:        ResolveConfig{Priority: priority},
 		SensitiveTypes: []detector.Type{detector.TypePIN, detector.TypeCVV},
+		Admin:          AdminConfig{Key: "pii-admin-key"},
 	}
 }
 
