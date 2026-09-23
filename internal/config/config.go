@@ -68,20 +68,20 @@ type AdminConfig struct {
 
 // RuleConfig is a user-defined PII detection rule (overlay on top of core).
 type RuleConfig struct {
-	Type       string  `yaml:"type"`
-	Regex      string  `yaml:"regex"`
-	Priority   int     `yaml:"priority"`
-	Context    string  `yaml:"context"` // regex matched in text before the span
-	Capture    string  `yaml:"capture"` // regex with the span value in group 1
-	Keyword    string  `yaml:"keyword"` // cheap substring pre-check (capture rules)
-	Confidence float32 `yaml:"confidence"`
+	Type       string  `yaml:"type" json:"type"`
+	Regex      string  `yaml:"regex" json:"regex"`
+	Priority   int     `yaml:"priority" json:"priority"`
+	Context    string  `yaml:"context" json:"context"` // regex matched in text before the span
+	Capture    string  `yaml:"capture" json:"capture"` // regex with the span value in group 1
+	Keyword    string  `yaml:"keyword" json:"keyword"` // cheap substring pre-check (capture rules)
+	Confidence float32 `yaml:"confidence" json:"confidence"`
 }
 
 // CombinationConfig links a sensitive type to required co-occurring types.
 type CombinationConfig struct {
-	Type     detector.Type   `yaml:"type"`
-	Requires []detector.Type `yaml:"requires"`
-	Window   int             `yaml:"window"` // byte proximity
+	Type     detector.Type   `yaml:"type" json:"type"`
+	Requires []detector.Type `yaml:"requires" json:"requires"`
+	Window   int             `yaml:"window" json:"window"` // byte proximity
 }
 
 // SystemConfig describes a consumer system: which PII types to mask, the
