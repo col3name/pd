@@ -18,10 +18,6 @@ import (
 	"github.com/kind-earthquake/pii-module/internal/store"
 )
 
-// errSystemDisabled is returned when a request's system does not resolve to an
-// enabled pipeline.
-var errSystemDisabled = errors.New("system disabled")
-
 type ProcessRequest struct {
 	Payload     string `json:"payload"`
 	PayloadID   string `json:"payload_id"`
@@ -55,16 +51,15 @@ func (h *Handler) systemPipeline(name string) (*pipeline.Pipeline, bool) {
 // runPipeline executes the pipeline directly or through the worker pool.
 func (h *Handler) runPipeline(ctx context.Context, system, payload string) (pipeline.Result, error) {
 	if h.Pool == nil {
-		p, ok := h.systemPipeline(system)
-		if !ok {
-			return pipeline.Result{}, errSystemDisabled
-		}
-		return p.Process(payload), nil
+		return h.Mgr.Pipeline(system).Process(payload), nil
 	}
 	heavy := len(payload) > h.Mgr.Config().Queue.HeavyThreshold
 	res, err := h.Pool.Submit(ctx, system, payload, heavy)
 	if err != nil {
 		return pipeline.Result{}, err
+	}
+	if res.Err != nil {
+		return pipeline.Result{}, res.Err
 	}
 	return pipeline.Result{Masked: res.Masked, Types: res.Types, Tokens: res.Tokens}, nil
 }
@@ -130,6 +125,13 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 				slog.Info("process: unmasked", "payload_id", req.PayloadID, "system", req.System, "latency_ms", time.Since(start).Milliseconds())
 				return
 			}
+		} else if errors.Is(err, store.ErrRedisUnavailable) {
+			// Redis is down and there is no local hit: cross-replica unmask
+			// cannot be served. Return 503 instead of re-masking.
+			http.Error(w, "unmask unavailable: storage degraded", http.StatusServiceUnavailable)
+			observability.RequestsTotal.WithLabelValues("unmask", "503").Inc()
+			observability.RequestLatency.WithLabelValues("unmask").Observe(time.Since(start).Seconds())
+			return
 		}
 	}
 	_, ok := h.systemPipeline(req.System)

@@ -48,6 +48,20 @@ services:
     networks:
       - pii-net
 
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    deploy:
+      replicas: 1
+    privileged: true
+    networks:
+      - pii-net
+
   autoscaler:
     image: pii-autoscaler:latest
     environment:

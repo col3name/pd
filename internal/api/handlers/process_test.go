@@ -195,9 +195,27 @@ func TestProcessLayeredRedisDown(t *testing.T) {
 	var resp2 ProcessResponse
 	require.NoError(t, json.Unmarshal(rec2.Body.Bytes(), &resp2))
 	require.Equal(t, "паспорт 4509 123456", resp2.Result)
-	// Masking still works with Redis down.
+	// A new payload_id with no local hit and Redis down cannot be correlated:
+	// the lookup returns ErrRedisUnavailable -> 503 (no re-mask).
 	rec3 := doProcess(t, h, "паспорт 4509 123456", "deg-2")
-	require.Equal(t, http.StatusOK, rec3.Code)
+	require.Equal(t, http.StatusServiceUnavailable, rec3.Code)
+}
+
+func TestProcessLayeredRedisDownUnmaskNoLocalHit503(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	redisStore := store.NewRedis(client, time.Hour)
+	local := store.NewMemory(time.Hour, 1000)
+	breaker := store.NewBreaker(1, time.Minute)
+	layered := store.NewLayered(redisStore, local, breaker)
+	m, err := control.New(control.WithConfig(config.Default()), control.WithStore(layered))
+	require.NoError(t, err)
+	h := &Handler{Mgr: m}
+	// Kill Redis before any local hit exists for this payload_id.
+	mr.Close()
+	// Unmask lookup with no local hit and Redis down -> 503, not re-mask.
+	rec := doProcess(t, h, "какая-то маска", "deg-miss")
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
 
 func TestProcessSensitiveCooccurrence(t *testing.T) {

@@ -75,7 +75,10 @@ func queryFloat(ctx context.Context, url string) (float64, error) {
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("prometheus returned status %d", resp.StatusCode)
 	}
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, err
+	}
 	var out struct {
 		Data struct {
 			Result []struct {
@@ -89,7 +92,11 @@ func queryFloat(ctx context.Context, url string) (float64, error) {
 	if len(out.Data.Result) == 0 || len(out.Data.Result[0].Value) < 2 {
 		return 0, fmt.Errorf("no data")
 	}
-	return strconv.ParseFloat(out.Data.Result[0].Value[1].(string), 64)
+	v, ok := out.Data.Result[0].Value[1].(string)
+	if !ok {
+		return 0, fmt.Errorf("unexpected value type %T", out.Data.Result[0].Value[1])
+	}
+	return strconv.ParseFloat(v, 64)
 }
 
 func currentReplicas(ctx context.Context, service string) (int, error) {
@@ -127,10 +134,10 @@ func main() {
 		}
 		cpu, err := queryFloat(ctx, c.promURL+"/api/v1/query?query="+c.cpuQuery)
 		if err != nil {
-			cancel()
-			fmt.Fprintf(os.Stderr, "autoscaler: cpu query: %v\n", err)
-			time.Sleep(c.poll)
-			continue
+			// CPU is a secondary signal (requires cAdvisor). A failure must not
+			// block queue/latency scaling: fall back to cpu=0.
+			fmt.Fprintf(os.Stderr, "autoscaler: cpu query: %v (using cpu=0)\n", err)
+			cpu = 0
 		}
 		cancel()
 
@@ -154,7 +161,7 @@ func main() {
 				lastScale = time.Now()
 			}
 		} else if scaleDown && replicas > c.minReplicas && time.Since(lastScale) > c.cooldown {
-			fmt.Printf("autoscaler: scale down %s %d->%d\n", c.service, replicas, replicas-1)
+			fmt.Printf("autoscaler: scale down %s %d->%d (cpu=%.1f%% queue=%.0f latency=%.0fms)\n", c.service, replicas, replicas-1, cpu, queueDepth, latency)
 			if err := scale(dctx, c.service, replicas-1); err != nil {
 				fmt.Fprintf(os.Stderr, "autoscaler: scale down: %v\n", err)
 			} else {

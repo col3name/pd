@@ -19,6 +19,9 @@ func NewBreaker(failures int, cooldown time.Duration) *Breaker {
 	if failures <= 0 {
 		failures = 1
 	}
+	if cooldown <= 0 {
+		cooldown = time.Second
+	}
 	return &Breaker{threshold: failures, cooldown: cooldown}
 }
 
@@ -26,7 +29,7 @@ func NewBreaker(failures int, cooldown time.Duration) *Breaker {
 func (b *Breaker) Allow() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.failures >= b.threshold && time.Now().Before(b.openUntil) {
+	if b.failures >= b.threshold && !time.Now().After(b.openUntil) {
 		return false
 	}
 	return true

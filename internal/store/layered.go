@@ -2,8 +2,14 @@ package store
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 )
+
+// ErrRedisUnavailable is returned by Get when Redis is unreachable and there is
+// no local cache hit. Callers that require cross-replica correlation (unmask)
+// should treat it as a degraded-storage condition.
+var ErrRedisUnavailable = errors.New("redis unavailable")
 
 // LayeredStore persists entries to Redis (source of truth) and a local
 // in-memory cache (fast path + fallback). A circuit breaker guards Redis: when
@@ -44,13 +50,13 @@ func (s *LayeredStore) Get(ctx context.Context, id string) (Entry, bool, error) 
 		return e, true, nil
 	}
 	if !s.breaker.Allow() {
-		return Entry{}, false, nil // Redis open; no local hit
+		return Entry{}, false, ErrRedisUnavailable // Redis open; no local hit
 	}
 	e, ok, err := s.redis.Get(ctx, id)
 	if err != nil {
 		s.breaker.Failure()
 		slog.Warn("layered: redis get failed", "error", err)
-		return Entry{}, false, nil
+		return Entry{}, false, ErrRedisUnavailable
 	}
 	s.breaker.Success()
 	if ok {

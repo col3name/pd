@@ -5,3 +5,7 @@ scrape_configs:
     static_configs:
       - targets: ["pii:8080"]
     metrics_path: /metrics
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+    metrics_path: /metrics

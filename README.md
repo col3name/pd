@@ -780,19 +780,22 @@ autoscaler-контейнер, который следит за нагрузко
 ### Автоскейлинг через autoscaler-контейнер
 
 Autoscaler (`deploy/autoscaler`) периодически опрашивает Prometheus и
-масштабирует сервис `pii_gateway` между `min_replicas` и `max_replicas`.
-Параметры задаются в `configs/config.yaml`:
+масштабирует сервис `pii` между `min_replicas` и `max_replicas`.
+Параметры задаются env-переменными в `deploy/stack.yml` (секция `autoscaler`),
+а не в `configs/config.yaml`:
 
 ```yaml
-autoscale:
-  min_replicas: 2
-  max_replicas: 20
-  cpu_up: 70          # масштабировать вверх при CPU > 70%
-  cpu_down: 30        # масштабировать вниз при CPU < 30%
-  queue_up: 100       # масштабировать вверх при длине очереди > 100
-  latency_p99_ms: 100 # масштабировать вверх при p99 > 100 мс
-  cooldown_seconds: 30
-  poll_seconds: 10
+autoscaler:
+  environment:
+    - SERVICE=pii
+    - MIN_REPLICAS=2
+    - MAX_REPLICAS=20
+    - CPU_UP=70          # масштабировать вверх при CPU > 70%
+    - CPU_DOWN=30        # масштабировать вниз при CPU < 30%
+    - QUEUE_UP=100       # масштабировать вверх при длине очереди > 100
+    - LATENCY_P99_MS=100 # масштабировать вверх при p99 > 100 мс
+    - COOLDOWN_SECONDS=30
+    - POLL_SECONDS=10
 ```
 
 ### Деградация при недоступности Redis

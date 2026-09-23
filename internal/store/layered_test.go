@@ -55,8 +55,20 @@ func TestLayeredRedisDownNoLocalMiss(t *testing.T) {
 	redisStore := NewRedis(redis.NewClient(&redis.Options{Addr: mr.Addr()}), time.Hour)
 	require.NoError(t, redisStore.Save(ctx, "id-4", Entry{Original: "remote"}))
 	mr.Close()
-	// Local cache empty + Redis down -> miss, no error.
+	// Local cache empty + Redis down -> miss with ErrRedisUnavailable.
 	_, ok, err := s.Get(ctx, "id-4")
-	require.NoError(t, err)
+	require.ErrorIs(t, err, ErrRedisUnavailable)
 	require.False(t, ok)
+}
+
+func TestLayeredRedisDownNoLocalHitReturnsErrRedisUnavailable(t *testing.T) {
+	s, mr := newLayered(t)
+	ctx := context.Background()
+	// No entry anywhere; kill Redis so the breaker opens.
+	mr.Close()
+	// Local cache empty + Redis down -> ErrRedisUnavailable.
+	_, ok, err := s.Get(ctx, "missing")
+	require.ErrorIs(t, err, ErrRedisUnavailable)
+	require.False(t, ok)
+	require.False(t, s.RedisUp())
 }
