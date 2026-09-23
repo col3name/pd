@@ -27,8 +27,8 @@ resolve:
     "ПАСПОРТ": 95
     "ИНН": 40
 ml:
-  enabled: false            # NER: https://github.com/yalue/onnxruntime_go
-  model_path: "/srv/models/ner/model.onnx"   # rubert-tiny ONNX-модель (scripts/setup_ner.sh)
+  enabled: true             # NER включён (требует WITH_NER=1 при сборке + scripts/setup_ner.sh)
+  model_path: "/srv/models/ner/model.onnx"
   vocab_path: "/srv/models/ner/vocab.txt"
   labels: [O, B-PER, I-PER, B-LOC, I-LOC, B-ORG, I-ORG]
 sensitive:

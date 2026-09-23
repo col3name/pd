@@ -646,10 +646,35 @@ curl -s -X POST http://5.42.118.103:5173/process \
 
 ## NER (smart path, опционально)
 
-`ml.enabled: true` + пути к ONNX-модели и vocab. NER подключается к детектору и
-используется для неоднозначных случаев; при недоступности модели сервер стартует
-без неё (`slog.Warn`, graceful degradation). Всё остальное — rule-based и fast path.
-Для установки модели см. `scripts/setup_ner.sh` из v1.
+NER подключается к детектору и используется для неоднозначных случаев; при
+недоступности модели сервер стартует без неё (`slog.Warn`, graceful degradation).
+Всё остальное — rule-based и fast path.
+
+### Запуск NER в Docker Compose
+
+NER требует CGO-сборки (ONNX Runtime) и файлов модели. Порядок:
+
+```bash
+# 1. Скачать модель, vocab и ONNX Runtime (в models/ner/)
+./scripts/setup_ner.sh
+
+# 2. Собрать образ с NER (WITH_NER=1 => CGO-сборка)
+docker build --build-arg WITH_NER=1 -t pii-module-v2 .
+
+# 3. Запустить с NER-конфигом (ml.enabled=true)
+WITH_NER=1 CONFIG_FILE=./configs/config.ner.yaml docker compose up -d --build
+```
+
+Что делает `setup_ner.sh`:
+- скачивает `model.onnx` и `vocab.txt` (rubert-tiny NER) в `models/ner/`;
+- скачивает и распаковывает ONNX Runtime shared library в `models/ner/`.
+
+`docker-compose.yml` монтирует `./models` в `/srv/models` и передаёт
+`ONNXRUNTIME_SHARED_LIBRARY_PATH`. Конфиг `configs/config.ner.yaml` включает
+`ml.enabled: true` с путями `/srv/models/ner/model.onnx` и `vocab.txt`.
+
+**Без NER** (по умолчанию) ничего из этого не нужно — сервер работает на
+rule-based детекторах. Для установки модели локально см. `scripts/setup_ner.sh`.
 
 ## Метрики (Prometheus)
 

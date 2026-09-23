@@ -11,9 +11,19 @@
 #     -v ./configs/config.redis.yaml:/srv/configs/config.yaml:ro pii-module-v2
 services:
   pii-module-v2:
-    build: .
+    build:
+      context: .
+      args:
+        WITH_NER: "${WITH_NER:-0}"   # 1 => CGO build with ONNX Runtime (run scripts/setup_ner.sh first)
     environment:
       DATABASE_DSN: "postgres://pii:pii@postgres:5432/pii?sslmode=disable"
+      # NER: point to the mounted model + onnxruntime shared library.
+      # Only used when WITH_NER=1 and ml.enabled=true in config.
+      ONNXRUNTIME_SHARED_LIBRARY_PATH: "/srv/models/ner/onnxruntime-linux-x64-1.17.1/lib/libonnxruntime.so"
+    volumes:
+      - ./models:/srv/models:ro   # model.onnx + vocab.txt + onnxruntime (from scripts/setup_ner.sh)
+      # When WITH_NER=1, use the NER-enabled config (ml.enabled=true).
+      - ${CONFIG_FILE:-./configs/config.yaml}:/srv/configs/config.yaml:ro
     restart: unless-stopped
     depends_on:
       - postgres
