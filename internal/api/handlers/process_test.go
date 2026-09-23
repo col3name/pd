@@ -269,3 +269,63 @@ func TestProcessSystemAPIKey(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec4.Body.Bytes(), &resp4))
 	require.Equal(t, "паспорт 4509 123456", resp4.Result)
 }
+
+func doProcessSystemBody(t *testing.T, h *Handler, payload, id, system, accessToken string) *httptest.ResponseRecorder {
+	t.Helper()
+	body, _ := json.Marshal(ProcessRequest{Payload: payload, PayloadID: id, System: system, AccessToken: accessToken})
+	req := httptest.NewRequest("POST", "/process", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.Process(rec, req)
+	return rec
+}
+
+func TestProcessSystemAccessTokenInBody(t *testing.T) {
+	h := newTestHandler(t, func(c *config.Config) {
+		c.Systems = []config.SystemConfig{
+			{Name: "chat", Enabled: true, APIKey: HashKey("sekret"), AllowUnmask: true},
+		}
+	})
+
+	// Без токена -> 401.
+	rec := doProcessSystemBody(t, h, "паспорт 4509 123456", "tok-1", "chat", "")
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+
+	// Неверный токен -> 401.
+	rec2 := doProcessSystemBody(t, h, "паспорт 4509 123456", "tok-1", "chat", "wrong")
+	require.Equal(t, http.StatusUnauthorized, rec2.Code)
+
+	// Верный токен в теле -> 200.
+	rec3 := doProcessSystemBody(t, h, "паспорт 4509 123456", "tok-1", "chat", "sekret")
+	require.Equal(t, http.StatusOK, rec3.Code)
+	var resp3 ProcessResponse
+	require.NoError(t, json.Unmarshal(rec3.Body.Bytes(), &resp3))
+	require.Contains(t, resp3.Result, "[ПАСПОРТ]")
+}
+
+func TestProcessSystemRequireKey(t *testing.T) {
+	h := newTestHandler(t, func(c *config.Config) {
+		c.Systems = []config.SystemConfig{
+			{Name: "locked", Enabled: true, RequireKey: true, AllowUnmask: true},
+		}
+	})
+
+	// require_key=true, но ключ не задан -> все запросы 401.
+	rec := doProcessSystem(t, h, "паспорт 4509 123456", "rk-1", "locked", "")
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	rec2 := doProcessSystemBody(t, h, "паспорт 4509 123456", "rk-1", "locked", "sekret")
+	require.Equal(t, http.StatusUnauthorized, rec2.Code)
+}
+
+func TestProcessSystemRequireKeyWithKey(t *testing.T) {
+	h := newTestHandler(t, func(c *config.Config) {
+		c.Systems = []config.SystemConfig{
+			{Name: "locked", Enabled: true, APIKey: HashKey("sekret"), RequireKey: true, AllowUnmask: true},
+		}
+	})
+
+	// require_key=true + ключ задан: без ключа 401, с верным ключом 200.
+	rec := doProcessSystem(t, h, "паспорт 4509 123456", "rk-2", "locked", "")
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	rec2 := doProcessSystemBody(t, h, "паспорт 4509 123456", "rk-2", "locked", "sekret")
+	require.Equal(t, http.StatusOK, rec2.Code)
+}

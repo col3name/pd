@@ -16,9 +16,10 @@ import (
 )
 
 type ProcessRequest struct {
-	Payload   string `json:"payload"`
-	PayloadID string `json:"payload_id"`
-	System    string `json:"system"`
+	Payload     string `json:"payload"`
+	PayloadID   string `json:"payload_id"`
+	System      string `json:"system"`
+	AccessToken string `json:"access_token"`
 }
 
 type ProcessResponse struct {
@@ -74,7 +75,7 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "system disabled", http.StatusForbidden)
 		return
 	}
-	if err := h.authorize(r, system); err != nil {
+	if err := h.authorize(r, system, req.AccessToken); err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -129,13 +130,27 @@ func (h *Handler) systemConfig(name string) *config.SystemConfig {
 	return h.Mgr.System(name)
 }
 
-// authorize enforces the per-system API key via the X-API-Key header. Systems
-// without a configured key are authorized implicitly.
-func (h *Handler) authorize(r *http.Request, s *config.SystemConfig) error {
-	if s == nil || s.APIKey == "" {
+// authorize enforces the per-system API key via the X-API-Key header or the
+// access_token body field. Systems without a configured key are authorized
+// implicitly, unless require_key is set.
+func (h *Handler) authorize(r *http.Request, s *config.SystemConfig, bodyToken string) error {
+	if s == nil {
 		return nil
 	}
-	if HashKey(r.Header.Get("X-API-Key")) == s.APIKey {
+	key := r.Header.Get("X-API-Key")
+	if key == "" {
+		key = bodyToken
+	}
+	if s.RequireKey {
+		if s.APIKey == "" || key == "" || HashKey(key) != s.APIKey {
+			return config.ErrUnauthorized
+		}
+		return nil
+	}
+	if s.APIKey == "" {
+		return nil
+	}
+	if HashKey(key) == s.APIKey {
 		return nil
 	}
 	return config.ErrUnauthorized
