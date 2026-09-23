@@ -84,6 +84,27 @@ func TestPipelineTokenModeRoundTrip(t *testing.T) {
 	require.Equal(t, orig, restored)
 }
 
+func TestCombinationPINRequiresCard(t *testing.T) {
+	d := detector.New(detector.StructuredRules())
+	p := pipeline.New(
+		d,
+		context.New(context.DefaultBoost, context.DefaultPenalty),
+		whitelist.New(nil, nil, nil),
+		resolve.DefaultPriority,
+		pipeline.Options{
+			Combinations: []pipeline.Combination{
+				{Type: detector.TypePIN, Requires: []detector.Type{detector.TypeCard}, Window: 80},
+			},
+		},
+	)
+	res := p.Process("пин 1234")
+	require.NotContains(t, res.Types, string(detector.TypePIN))
+
+	res2 := p.Process("карта 4276 1234 5678 9012, пин 1234")
+	require.Contains(t, res2.Types, string(detector.TypePIN))
+	require.Contains(t, res2.Types, string(detector.TypeCard))
+}
+
 func containsType(spans []detector.Span, t detector.Type) bool {
 	for _, s := range spans {
 		if s.Type == t {

@@ -21,6 +21,16 @@ type Options struct {
 	Gate float32
 	// AllowedTypes restricts masking to the given PII types (empty = all).
 	AllowedTypes []detector.Type
+	// Combinations mask a sensitive type only when a required co-occurring
+	// type is present within Window bytes.
+	Combinations []Combination
+}
+
+// Combination masks a type only when another PII type appears nearby.
+type Combination struct {
+	Type     detector.Type
+	Requires []detector.Type
+	Window   int // byte proximity; 0 = default 80
 }
 
 // Result is the outcome of a pipeline run.
@@ -73,6 +83,7 @@ func (p *Pipeline) Gate() float32 { return p.opts.Gate }
 func (p *Pipeline) Process(text string) Result {
 	spans := p.detector.Detect(text)
 	spans = p.escalateDates(text, spans)
+	spans = p.applyCombinations(spans)
 	spans = resolve.Resolve(spans, p.priority)
 
 	kept := make([]detector.Span, 0, len(spans))
@@ -108,6 +119,69 @@ func (p *Pipeline) Process(text string) Result {
 		types = append(types, string(s.Type))
 	}
 	return Result{Masked: masked, Types: types, Tokens: tokens, Spans: kept}
+}
+
+// applyCombinations drops spans whose combination requires another, absent type.
+func (p *Pipeline) applyCombinations(in []detector.Span) []detector.Span {
+	if len(p.opts.Combinations) == 0 {
+		return in
+	}
+	kept := make([]detector.Span, 0, len(in))
+	for _, s := range in {
+		if p.passesCombination(s, in) {
+			kept = append(kept, s)
+		}
+	}
+	return kept
+}
+
+func (p *Pipeline) passesCombination(s detector.Span, spans []detector.Span) bool {
+	for _, c := range p.opts.Combinations {
+		if s.Type != c.Type {
+			continue
+		}
+		window := c.Window
+		if window == 0 {
+			window = 80
+		}
+		found := false
+		for _, o := range spans {
+			if o.Type == s.Type {
+				continue
+			}
+			if !typeInList(o.Type, c.Requires) {
+				continue
+			}
+			if proximity(s, o) <= window {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func typeInList(t detector.Type, list []detector.Type) bool {
+	for _, x := range list {
+		if x == t {
+			return true
+		}
+	}
+	return false
+}
+
+func proximity(a, b detector.Span) int {
+	switch {
+	case b.End <= a.Start:
+		return a.Start - b.End
+	case a.End <= b.Start:
+		return b.Start - a.End
+	default:
+		return 0 // overlap
+	}
 }
 
 // filterAllowed drops spans whose type is outside the configured AllowedTypes.
