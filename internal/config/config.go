@@ -21,10 +21,37 @@ type MaskingConfig struct {
 
 // StoreConfig controls the payload store.
 type StoreConfig struct {
-	Type     string `yaml:"type"` // "memory" | "redis"
-	TTLHours int    `yaml:"ttl_hours"`
-	Capacity int    `yaml:"capacity"`
-	RedisURL string `yaml:"redis_url"`
+	Type     string        `yaml:"type"` // "memory" | "redis" | "layered"
+	TTLHours int           `yaml:"ttl_hours"`
+	Capacity int           `yaml:"capacity"`
+	RedisURL string        `yaml:"redis_url"`
+	Circuit  CircuitConfig `yaml:"circuit"`
+}
+
+// QueueConfig controls the worker pool.
+type QueueConfig struct {
+	Workers        int `yaml:"workers"`
+	FastCapacity   int `yaml:"fast_capacity"`
+	HeavyCapacity  int `yaml:"heavy_capacity"`
+	HeavyThreshold int `yaml:"heavy_threshold"` // payload bytes longer => heavy queue
+}
+
+// CircuitConfig controls the Redis circuit breaker.
+type CircuitConfig struct {
+	Failures        int `yaml:"failures"`
+	CooldownSeconds int `yaml:"cooldown_seconds"`
+}
+
+// AutoscaleConfig controls the Swarm autoscaler.
+type AutoscaleConfig struct {
+	MinReplicas     int `yaml:"min_replicas"`
+	MaxReplicas     int `yaml:"max_replicas"`
+	CPUUp           int `yaml:"cpu_up"`
+	CPUDown         int `yaml:"cpu_down"`
+	QueueUp         int `yaml:"queue_up"`
+	LatencyP99MS    int `yaml:"latency_p99_ms"`
+	CooldownSeconds int `yaml:"cooldown_seconds"`
+	PollSeconds     int `yaml:"poll_seconds"`
 }
 
 // DatabaseConfig controls the PostgreSQL connection for systems/rules/combos.
@@ -120,6 +147,8 @@ type Config struct {
 	Admin          AdminConfig         `yaml:"admin"`
 	Rules          []RuleConfig        `yaml:"rules"`
 	Combinations   []CombinationConfig `yaml:"combinations"`
+	Queue          QueueConfig         `yaml:"queue"`
+	Autoscale      AutoscaleConfig     `yaml:"autoscale"`
 }
 
 // Default returns the v1-compatible default configuration.
@@ -141,6 +170,8 @@ func Default() *Config {
 		Resolve:        ResolveConfig{Priority: priority},
 		SensitiveTypes: []detector.Type{detector.TypePIN, detector.TypeCVV},
 		Admin:          AdminConfig{Key: "pii-admin-key", Login: "admin", Password: "admin123"},
+		Queue:          QueueConfig{Workers: 16, FastCapacity: 1024, HeavyCapacity: 256, HeavyThreshold: 4096},
+		Autoscale:      AutoscaleConfig{MinReplicas: 2, MaxReplicas: 20, CPUUp: 70, CPUDown: 30, QueueUp: 100, LatencyP99MS: 100, CooldownSeconds: 30, PollSeconds: 10},
 	}
 }
 

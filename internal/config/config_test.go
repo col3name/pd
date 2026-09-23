@@ -66,3 +66,42 @@ combinations:
 	require.Equal(t, []detector.Type{detector.TypeCard}, cfg.Combinations[0].Requires)
 	require.Equal(t, 80, cfg.Combinations[0].Window)
 }
+
+func TestLoadQueueAndAutoscale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `
+queue:
+  workers: 8
+  fast_capacity: 512
+  heavy_capacity: 128
+  heavy_threshold: 4096
+store:
+  type: layered
+  circuit:
+    failures: 5
+    cooldown_seconds: 5
+autoscale:
+  min_replicas: 2
+  max_replicas: 20
+  cpu_up: 70
+  cpu_down: 30
+  queue_up: 100
+  latency_p99_ms: 100
+  cooldown_seconds: 30
+  poll_seconds: 10
+`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	require.Equal(t, 8, cfg.Queue.Workers)
+	require.Equal(t, 512, cfg.Queue.FastCapacity)
+	require.Equal(t, 128, cfg.Queue.HeavyCapacity)
+	require.Equal(t, 4096, cfg.Queue.HeavyThreshold)
+	require.Equal(t, "layered", cfg.Store.Type)
+	require.Equal(t, 5, cfg.Store.Circuit.Failures)
+	require.Equal(t, 5, cfg.Store.Circuit.CooldownSeconds)
+	require.Equal(t, 20, cfg.Autoscale.MaxReplicas)
+	require.Equal(t, 70, cfg.Autoscale.CPUUp)
+	require.Equal(t, 10, cfg.Autoscale.PollSeconds)
+}
