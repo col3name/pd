@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, Cell, List, Section } from '@telegram-apps/telegram-ui';
 import LoginScreen from './LoginScreen';
-import SystemsTab from './SystemsTab';
+import TeamsTab from './TeamsTab';
 import { getToken, setToken, api } from './api';
 
 export default function App() {
@@ -19,10 +19,10 @@ export default function App() {
     <div style={{ maxWidth: 720, margin: '0 auto', padding: 16 }}>
       <Section header="PII Gateway — Админка">
         <List>
-          <Cell subtitle="системы-потребители">Системы</Cell>
+          <Cell subtitle="команды-потребители">Команды</Cell>
         </List>
       </Section>
-      <SystemsTab />
+      <TeamsTab />
       <Button onClick={async () => { try { await api.logout(); } finally { setToken(''); setAuthed(false); } }}>
         Выйти
       </Button>
