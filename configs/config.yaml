@@ -62,3 +62,21 @@ systems:
   - name: disabled_system
     enabled: false
     allow_unmask: false
+
+admin:
+  key: "pii-admin-key"
+
+# Правила расширения (overlay): новые типы ПДН без переписывания ядра.
+# Требуют: type (имя), regex (go RE2) или capture (значение в group 1).
+rules:
+  - type: "СНИЛС"
+    regex: "\\d{3}-\\d{3}-\\d{3}\\s\\d{2}"
+    priority: 0
+    confidence: 0.99
+
+# Комбинации: тип маскируется только при наличии требуемых типов рядом.
+# Раскомментируйте, чтобы ПИН маскировался только рядом с картой.
+# combinations:
+#   - type: "ПИН"
+#     requires: ["КАРТА"]
+#     window: 80

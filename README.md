@@ -241,6 +241,46 @@ docker compose --profile redis up -d --build
 # и смонтировать конфиг: -v ./configs/config.redis.yaml:/srv/configs/config.yaml:ro
 ```
 
+## Live-настройка (hot-reload) через admin API
+
+Конфиг читается из YAML при старте, но менять его можно на лету — без рестарта и
+без правки кода. `PUT /v1/config` атомарно пересобирает детектор, контекст, whitelist
+и pipeline'ы систем. Запись защищена заголовком `X-Admin-Key` (значение —
+`config.Admin.Key` из YAML, по умолчанию `pii-admin-key`).
+
+| Эндпоинт | Метод | Описание |
+|----------|-------|----------|
+| `/v1/config` | `GET` | Текущий конфиг (`rev`, `masking`, `systems`, `rules`, `combinations`, `known_types`). Ключи API-систем **не возвращаются** — только флаг `api_key_set`. |
+| `/v1/config` | `PUT` | Запись конфига, тело — тот же JSON-вид, что у `GET` (плюс опциональный `api_key` на систему). Требует `X-Admin-Key`; ответ `{"rev": N}`. |
+| `/v1/config/rules` | `GET` | Список известных типов ПДН. |
+
+CORS для admin-эндпоинтов настраивается env `ADMIN_ORIGIN` (по умолчанию `*`) — чтобы
+SPA в `web/` могла читать/писать конфиг из браузера.
+
+Пример: включить комбинацию «ПИН маскируется только рядом с картой»:
+
+```bash
+curl -s -X PUT http://localhost:8080/v1/config \
+  -H 'X-Admin-Key: pii-admin-key' \
+  -H 'Content-Type: application/json' \
+  -d '{"combinations":[{"type":"ПИН","requires":["КАРТА"],"window":80}]}'
+# → {"rev":1}
+
+# теперь одиночный ПИН не маскируется…
+curl -s -X POST http://localhost:8080/process \
+  -d '{"payload":"пин 1234","payload_id":"cdemo1"}'
+# → {"result":"пин 1234"}
+
+# …а рядом с картой — маскируются оба типа
+curl -s -X POST http://localhost:8080/process \
+  -d '{"payload":"карта 4276 1234 5678 9012, пин 1234","payload_id":"cdemo2"}'
+# → {"result":"карта [КАРТА], пин [ПИН]"}
+```
+
+Тот же механизм покрывает overlay-правила: новые типы ПДН (например, СНИЛС из
+`configs/config.yaml`) добавляются в `rules` без переписывания ядра. Готовая админка
+(SPA) — `web/` (Vite dev :5173 / nginx prod), поверх описанных эндпоинтов.
+
 ## NER (smart path, опционально)
 
 `ml.enabled: true` + пути к ONNX-модели и vocab. NER подключается к детектору и
