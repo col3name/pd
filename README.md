@@ -51,7 +51,8 @@ LLM, а затем демаскирует ответ по сохранённой
 | `http://<host>:5173/docs` | Swagger UI (Try it out) |
 | `http://<host>:5173/openapi.yaml` | OpenAPI-спецификация |
 | `http://<host>:9090` | Prometheus (отдельный порт) |
-| `http://<host>:3000` | Grafana (отдельный порт) |
+| `http://<host>:3000` | Grafana (admin/admin) |
+| `http://<host>:3000/d/pii-gateway/pii-gateway` | Дашборд «PII Gateway» (RPS, latency, PII, Go runtime) |
 
 ## Демо для жюри
 
@@ -72,9 +73,10 @@ curl -X POST http://localhost:5173/process -H 'Content-Type: application/json' \
 **3. Логи:** `docker compose logs -f pii-module-v2` — структурированные (slog),
 без значений ПД (`payload_id`, `types`, `latency_ms`).
 
-**4. Метрики:** `http://localhost:5173/metrics` (Prometheus) и Grafana
-`http://localhost:3000` (admin/admin) — дашборд `pii_requests_total`,
-`pii_latency_seconds`, `pii_detected_total`.
+**4. Метрики:** `http://localhost:5173/metrics` (Prometheus-формат) и Grafana
+`http://localhost:3000` (admin/admin) — дашборд «PII Gateway»
+(`/d/pii-gateway/pii-gateway`): RPS, latency P95, ошибки, mask/unmask,
+PII по типам, Go runtime.
 
 **5. Готовый сценарий:** `./scripts/curl_demo.sh http://localhost:5173`
 
@@ -108,6 +110,9 @@ go run ./cmd/server
 
 # Docker (демон) — memory store, Redis не требуется
 docker compose up -d --build
+
+# Метрики и дашборды (Prometheus + Grafana)
+docker compose up -d prometheus grafana
 ```
 
 Проверка:
@@ -352,6 +357,13 @@ curl -s -X POST http://localhost:5173/process \
 | `pii_requests_total{type,status}` | Counter | Запросы по направлению (mask/unmask) и статусу |
 | `pii_latency_seconds{type}` | Histogram | Latency запросов |
 | `pii_detected_total{type}` | Counter | Обнаружено ПД по типам |
+
+**Доступ:**
+- Сырые метрики: `http://<host>:5173/metrics` (Prometheus-формат).
+- Prometheus UI: `http://<host>:9090` (скрейпит `pii-module-v2:8080/metrics`).
+- Grafana: `http://<host>:3000` (admin/admin) — дашборд «PII Gateway»
+  (`/d/pii-gateway/pii-gateway`) с панелями RPS, latency P95, ошибки,
+  mask/unmask, PII по типам, Go runtime (heap, goroutines, GC).
 
 Логи — структурированные (slog), без значений ПД: `payload_id`, `types`, `latency_ms`.
 
