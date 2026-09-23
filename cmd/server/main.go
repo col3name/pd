@@ -22,6 +22,7 @@ import (
 	"github.com/kind-earthquake/pii-module/internal/api/handlers"
 	"github.com/kind-earthquake/pii-module/internal/config"
 	"github.com/kind-earthquake/pii-module/internal/control"
+	"github.com/kind-earthquake/pii-module/internal/db"
 	"github.com/kind-earthquake/pii-module/internal/detector"
 	"github.com/kind-earthquake/pii-module/internal/ner"
 	"github.com/kind-earthquake/pii-module/internal/observability"
@@ -48,6 +49,25 @@ func main() {
 		st = store.NewMemory(ttl, cfg.Store.Capacity)
 	}
 
+	ctx := context.Background()
+	var repo *db.Repo
+	if cfg.Database.DSN != "" {
+		repo, err = db.New(ctx, cfg.Database.DSN)
+		if err != nil {
+			slog.Error("failed to connect database", "error", err)
+			os.Exit(1)
+		}
+		defer repo.Close()
+		if err := repo.SeedFromConfig(ctx, cfg); err != nil {
+			slog.Error("failed to seed database", "error", err)
+			os.Exit(1)
+		}
+		if err := repo.SeedAdmin(ctx, cfg.Admin.Login, cfg.Admin.Password); err != nil {
+			slog.Error("failed to seed admin", "error", err)
+			os.Exit(1)
+		}
+	}
+
 	detectorOpts := []detector.Option{}
 	var nerModel *ner.Model
 	if cfg.ML.Enabled && cfg.ML.ModelPath != "" && cfg.ML.VocabPath != "" {
@@ -69,12 +89,13 @@ func main() {
 		control.WithConfig(cfg),
 		control.WithStore(st),
 		control.WithDetectorOpts(detectorOpts...),
+		control.WithRepo(repo),
 	)
 	if err != nil {
 		slog.Error("failed to build pipeline", "error", err)
 		os.Exit(1)
 	}
-	h := &handlers.Handler{Mgr: mgr}
+	h := &handlers.Handler{Mgr: mgr, Repo: repo}
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -85,7 +106,18 @@ func main() {
 	r.Handle("/metrics", observability.Handler())
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(handlers.CORS(adminOrigin()))
-		r.Get("/config", h.GetConfig)
+		r.Post("/auth/login", h.Login)
+		r.Post("/auth/logout", h.RequireAuth(h.Logout))
+		r.Group(func(r chi.Router) {
+			r.Use(requireAuth(h))
+			r.Get("/config", h.GetConfig)
+			r.Get("/systems", h.ListSystems)
+			r.Post("/systems", h.CreateSystem)
+			r.Get("/systems/{name}", h.GetSystem)
+			r.Put("/systems/{name}", h.UpdateSystem)
+			r.Delete("/systems/{name}", h.DeleteSystem)
+			r.Post("/systems/{name}/regenerate-key", h.RegenerateKey)
+		})
 	})
 	r.Route("/process", func(r chi.Router) {
 		r.Use(handlers.CORS(adminOrigin()))
@@ -139,6 +171,16 @@ func adminOrigin() string {
 		return "*"
 	}
 	return origin
+}
+
+// requireAuth adapts handlers.RequireAuth (a http.HandlerFunc wrapper) into a
+// chi middleware so it can be applied to a route group via r.Use.
+func requireAuth(h *handlers.Handler) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h.RequireAuth(next.ServeHTTP)(w, r)
+		})
+	}
 }
 
 // redisOptions converts a redis URL (redis://host:port/db) into redis.Options,

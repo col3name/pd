@@ -63,8 +63,12 @@ systems:
     enabled: false
     allow_unmask: false
 
+database:
+  dsn: "postgres://pii:pii@localhost:5432/pii?sslmode=disable"
+
 admin:
-  key: "pii-admin-key"
+  login: "admin"
+  password: "admin123"
 
 # Правила расширения (overlay): новые типы ПДН без переписывания ядра.
 # Требуют: type (имя), regex (go RE2) или capture (значение в group 1).
