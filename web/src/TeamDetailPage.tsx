@@ -40,6 +40,7 @@ export default function TeamDetailPage() {
   const allEnabled = (team.pii ?? []).length === 0;
 
   const toggleType = (type: string, on: boolean) => {
+    if (knownTypes.length === 0) return;
     if (on) {
       if (allEnabled) return;
       const next = [...(team.pii ?? []), type];
@@ -52,6 +53,7 @@ export default function TeamDetailPage() {
     }
   };
 
+  const hasRealKey = !!newKey;
   const accessKey = newKey || (team.api_key_set ? '••••••••••••••••••••••••••••••••' : '');
 
   const curlMask = `curl -s -X POST http://localhost:8080/process \\
@@ -127,11 +129,11 @@ export default function TeamDetailPage() {
         </Cell>
         <Cell>
           <Button size="s" onClick={() => regen.mutate()}>Новый ключ</Button>
-          {accessKey && <Button size="s" onClick={() => copy(accessKey)}>Копировать</Button>}
+          {hasRealKey && <Button size="s" onClick={() => copy(accessKey)}>Копировать</Button>}
         </Cell>
       </Section>
 
-      {accessKey && (
+      {hasRealKey && (
         <Section header="Примеры использования">
           <Cell subtitle="curl — маскирование">
             <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{curlMask}</pre>
