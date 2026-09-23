@@ -100,6 +100,7 @@ type SystemConfig struct {
 	PII         []detector.Type `yaml:"pii"`     // empty => all supported types
 	Masking     string          `yaml:"masking"` // "redact" | "token"; empty => global
 	AllowUnmask bool            `yaml:"allow_unmask"`
+	RequireKey  bool            `yaml:"require_key"` // true => /process requires a valid key
 }
 
 // Config is the version2 runtime configuration.
