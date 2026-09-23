@@ -16,8 +16,8 @@ mkdir -p "$MODEL_DIR"
 
 # ── 1. Model + vocab ─────────────────────────────────────────────────────
 # Source: HuggingFace rubert-tiny NER (ONNX export). Override with env vars.
-MODEL_URL="${NER_MODEL_URL:-https://huggingface.co/cointegrated/rubert-tiny2/resolve/main/model.onnx}"
-VOCAB_URL="${NER_VOCAB_URL:-https://huggingface.co/cointegrated/rubert-tiny2/resolve/main/vocab.txt}"
+MODEL_URL="${NER_MODEL_URL:-https://huggingface.co/onnx-community/ner-rubert-tiny-news-ONNX/resolve/main/onnx/model.onnx}"
+VOCAB_URL="${NER_VOCAB_URL:-https://huggingface.co/onnx-community/ner-rubert-tiny-news-ONNX/resolve/main/vocab.txt}"
 
 echo "Downloading rubert-tiny NER ONNX model..."
 curl -L --fail -o "$MODEL_DIR/model.onnx" "$MODEL_URL"
