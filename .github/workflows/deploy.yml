@@ -21,4 +21,4 @@ jobs:
             git reset --hard origin/main
             docker compose up -d --build
             sleep 3
-            curl -sf http://localhost:8080/health || exit 1
+            curl -sf http://localhost:5173/health || exit 1
