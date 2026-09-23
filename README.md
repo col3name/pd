@@ -8,6 +8,41 @@
 Проектировался под high-load: RPS 1000+ при latency < 100 ms, round-trip `POST /process`
 без потерь (демаскирование возвращает исходную строку байт-в-байт).
 
+## Быстрый старт
+
+```bash
+# Локально — без Redis (in-memory store по умолчанию)
+cd version2
+go run ./cmd/server
+
+# Docker (демон) — memory store, Redis не требуется
+docker compose up -d --build
+
+# Метрики и дашборды (Prometheus + Grafana)
+docker compose up -d prometheus grafana
+```
+
+Проверка:
+```bash
+curl -X POST http://5.42.118.103:5173/process \
+  -H "Content-Type: application/json" \
+  -d '{"payload":"паспорт 4509 123456, email test@example.com","payload_id":"test-1"}'
+# → {"result":"паспорт [ПАСПОРТ], email [EMAIL]"}
+
+# Демаскирование — тот же payload_id + наша маска возвращает оригинал байт-в-байт
+curl -X POST http://5.42.118.103:5173/process \
+  -H "Content-Type: application/json" \
+  -d '{"payload":"паспорт [ПАСПОРТ], email [EMAIL]","payload_id":"test-1"}'
+# → {"result":"паспорт 4509 123456, email test@example.com"}
+
+# Идемпотентность: повтор прямого шага (та же исходная строка) возвращает ту же маску
+curl -X POST http://5.42.118.103:5173/process \
+  -H "Content-Type: application/json" \
+  -d '{"payload":"паспорт 4509 123456, email test@example.com","payload_id":"test-1"}'
+# → {"result":"паспорт [ПАСПОРТ], email [EMAIL]"}
+```
+
+
 ## Реализованные фичи
 
 ### Критерий 3.4 — Гибкая настройка и расширяемость
@@ -252,39 +287,7 @@ NER запускается **только для неоднозначных сл
 | АДРЕС | Словарь городов + маркеры улиц + контекст |
 | ФИО, АДРЕС (неоднозначные) | NER (smart path, опционально) |
 
-## Быстрый старт
 
-```bash
-# Локально — без Redis (in-memory store по умолчанию)
-cd version2
-go run ./cmd/server
-
-# Docker (демон) — memory store, Redis не требуется
-docker compose up -d --build
-
-# Метрики и дашборды (Prometheus + Grafana)
-docker compose up -d prometheus grafana
-```
-
-Проверка:
-```bash
-curl -X POST http://5.42.118.103:5173/process \
-  -H "Content-Type: application/json" \
-  -d '{"payload":"паспорт 4509 123456, email test@example.com","payload_id":"test-1"}'
-# → {"result":"паспорт [ПАСПОРТ], email [EMAIL]"}
-
-# Демаскирование — тот же payload_id + наша маска возвращает оригинал байт-в-байт
-curl -X POST http://5.42.118.103:5173/process \
-  -H "Content-Type: application/json" \
-  -d '{"payload":"паспорт [ПАСПОРТ], email [EMAIL]","payload_id":"test-1"}'
-# → {"result":"паспорт 4509 123456, email test@example.com"}
-
-# Идемпотентность: повтор прямого шага (та же исходная строка) возвращает ту же маску
-curl -X POST http://5.42.118.103:5173/process \
-  -H "Content-Type: application/json" \
-  -d '{"payload":"паспорт 4509 123456, email test@example.com","payload_id":"test-1"}'
-# → {"result":"паспорт [ПАСПОРТ], email [EMAIL]"}
-```
 
 Готовый сценарий демо для жюри — `scripts/curl_demo.sh` (health, маскирование,
 демаскирование, системы с API-ключами, 401/403/404, ловушки, метрики):
