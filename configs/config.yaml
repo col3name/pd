@@ -2,11 +2,30 @@
 port: 8080
 allow_unmask: true
 log_file: "/srv/logs/pii-gateway.log"   # путь для логов (скачивание в админке); пусто = только stderr
+queue:
+  workers: 16
+  fast_capacity: 1024
+  heavy_capacity: 256
+  heavy_threshold: 4096
+
 store:
-  type: memory          # "memory" | "redis"
+  type: layered          # "memory" | "redis" | "layered"
   ttl_hours: 24
   capacity: 262144
   redis_url: "redis://localhost:6379/0"
+  circuit:
+    failures: 5
+    cooldown_seconds: 5
+
+autoscale:
+  min_replicas: 2
+  max_replicas: 20
+  cpu_up: 70
+  cpu_down: 30
+  queue_up: 100
+  latency_p99_ms: 100
+  cooldown_seconds: 30
+  poll_seconds: 10
 masking:
   mode: redact          # "redact" | "token"
 context:

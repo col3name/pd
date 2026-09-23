@@ -24,7 +24,7 @@ func TestLoadFromYAML(t *testing.T) {
 	cfg, err := Load(filepath.Join("..", "..", "configs", "config.yaml"))
 	require.NoError(t, err)
 	require.Equal(t, "redact", cfg.Masking.Mode)
-	require.Equal(t, "memory", cfg.Store.Type)
+	require.Equal(t, "layered", cfg.Store.Type)
 	require.True(t, cfg.Context.Enabled)
 	require.Len(t, cfg.Whitelist.Persons, 3)
 	require.Equal(t, 100, cfg.Resolve.Priority[detector.TypeCard])

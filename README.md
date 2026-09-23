@@ -765,6 +765,53 @@ size      c    rps     p50      p99
 (store заполнен) дают те же цифры без деградации; демаскирование на 100k
 возвращает оригинал байт-в-байт.
 
+## Горизонтальное масштабирование (Docker Swarm)
+
+Для горизонтального масштабирования используется Docker Swarm. Стек
+описывается в `deploy/stack.yml` и разворачивается одной командой:
+
+```bash
+docker stack deploy -c deploy/stack.yml pii
+```
+
+Стек поднимает несколько реплик gateway-сервиса, Redis (layered store) и
+autoscaler-контейнер, который следит за нагрузкой и меняет число реплик.
+
+### Автоскейлинг через autoscaler-контейнер
+
+Autoscaler (`deploy/autoscaler`) периодически опрашивает Prometheus и
+масштабирует сервис `pii_gateway` между `min_replicas` и `max_replicas`.
+Параметры задаются в `configs/config.yaml`:
+
+```yaml
+autoscale:
+  min_replicas: 2
+  max_replicas: 20
+  cpu_up: 70          # масштабировать вверх при CPU > 70%
+  cpu_down: 30        # масштабировать вниз при CPU < 30%
+  queue_up: 100       # масштабировать вверх при длине очереди > 100
+  latency_p99_ms: 100 # масштабировать вверх при p99 > 100 мс
+  cooldown_seconds: 30
+  poll_seconds: 10
+```
+
+### Деградация при недоступности Redis
+
+Store работает в режиме `layered`: горячие данные живут в памяти, Redis
+используется как общий слой для корреляции между репликами. Если Redis
+недоступен, включается circuit breaker (`store.circuit`): после `failures`
+подряд неудачных обращений gateway переходит в деградированный режим и
+работает только на in-memory слое, продолжая обслуживать запросы без
+ошибок. После `cooldown_seconds` попытки подключения возобновляются.
+
+```yaml
+store:
+  type: layered
+  circuit:
+    failures: 5
+    cooldown_seconds: 5
+```
+
 ## Анти-паттерны (адversarial-кейсы)
 
 - `Александр Пушкин написал роман` — **не** маскируется (penalty + whitelist).
