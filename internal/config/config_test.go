@@ -31,6 +31,13 @@ func TestLoadFromYAML(t *testing.T) {
 	require.Equal(t, 40, cfg.Resolve.Priority[detector.TypeINN])
 }
 
+func TestDefaultAdminAndDatabase(t *testing.T) {
+	cfg := Default()
+	require.Equal(t, "admin", cfg.Admin.Login)
+	require.Equal(t, "admin123", cfg.Admin.Password)
+	require.Equal(t, "", cfg.Database.DSN)
+}
+
 func TestLoadAdminRulesCombinations(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

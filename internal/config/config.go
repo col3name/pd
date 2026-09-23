@@ -27,6 +27,11 @@ type StoreConfig struct {
 	RedisURL string `yaml:"redis_url"`
 }
 
+// DatabaseConfig controls the PostgreSQL connection for systems/rules/combos.
+type DatabaseConfig struct {
+	DSN string `yaml:"dsn"`
+}
+
 // ContextConfig tunes the context resolver keywords (nil maps → defaults).
 type ContextConfig struct {
 	Enabled bool                       `yaml:"enabled"`
@@ -61,9 +66,11 @@ type RateLimitConfig struct {
 	Burst float64 `yaml:"burst"`
 }
 
-// AdminConfig guards config writes (PUT /v1/config).
+// AdminConfig guards the admin UI/API (login/password, seeded to DB).
 type AdminConfig struct {
-	Key string `yaml:"key"`
+	Key      string `yaml:"key"`
+	Login    string `yaml:"login"`
+	Password string `yaml:"password"`
 }
 
 // RuleConfig is a user-defined PII detection rule (overlay on top of core).
@@ -100,6 +107,7 @@ type Config struct {
 	Port           int                 `yaml:"port"`
 	AllowUnmask    bool                `yaml:"allow_unmask"`
 	Store          StoreConfig         `yaml:"store"`
+	Database       DatabaseConfig      `yaml:"database"`
 	Masking        MaskingConfig       `yaml:"masking"`
 	Context        ContextConfig       `yaml:"context"`
 	Whitelist      WhitelistConfig     `yaml:"whitelist"`
@@ -131,7 +139,7 @@ func Default() *Config {
 		Whitelist:      WhitelistConfig{Enabled: true},
 		Resolve:        ResolveConfig{Priority: priority},
 		SensitiveTypes: []detector.Type{detector.TypePIN, detector.TypeCVV},
-		Admin:          AdminConfig{Key: "pii-admin-key"},
+		Admin:          AdminConfig{Key: "pii-admin-key", Login: "admin", Password: "admin123"},
 	}
 }
 
