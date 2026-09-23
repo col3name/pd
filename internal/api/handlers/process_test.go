@@ -42,8 +42,8 @@ func doProcess(t *testing.T, h *Handler, payload, id string) *httptest.ResponseR
 func TestProcessThroughPool(t *testing.T) {
 	h := newTestHandler(t)
 	// Attach a pool to the handler.
-	h.Pool = queue.New(4, 64, 16, func(payload string) queue.Result {
-		res := h.Mgr.Pipeline("").Process(payload)
+	h.Pool = queue.New(4, 64, 16, func(system, payload string) queue.Result {
+		res := h.Mgr.Pipeline(system).Process(payload)
 		return queue.Result{Masked: res.Masked, Types: res.Types, Tokens: res.Tokens}
 	})
 	defer h.Pool.Close()
@@ -52,6 +52,31 @@ func TestProcessThroughPool(t *testing.T) {
 	var resp ProcessResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Contains(t, resp.Result, "[ПАСПОРТ]")
+}
+
+func TestProcessThroughPoolRespectsSystem(t *testing.T) {
+	// A system with a restricted PII set (only PHONE and EMAIL). The pool path
+	// must resolve the per-system pipeline, not the default one.
+	h := newTestHandler(t, func(c *config.Config) {
+		c.Systems = []config.SystemConfig{
+			{Name: "analytics", Enabled: true, PII: []detector.Type{detector.TypePhone, detector.TypeEmail}, AllowUnmask: false},
+		}
+	})
+	h.Pool = queue.New(4, 64, 16, func(system, payload string) queue.Result {
+		res := h.Mgr.Pipeline(system).Process(payload)
+		return queue.Result{Masked: res.Masked, Types: res.Types, Tokens: res.Tokens}
+	})
+	defer h.Pool.Close()
+
+	rec := doProcessSystem(t, h, "Клиент Иванов Иван, тел +7 912 345-67-89, email ivanov@test.ru, паспорт 4509 123456", "pool-sys-1", "analytics", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp ProcessResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	// Только разрешённые типы замаскированы: телефон и email, но не ФИО и паспорт.
+	require.Contains(t, resp.Result, "[ТЕЛЕФОН]")
+	require.Contains(t, resp.Result, "[EMAIL]")
+	require.Contains(t, resp.Result, "Иванов Иван")
+	require.Contains(t, resp.Result, "4509 123456")
 }
 
 func TestProcessMaskThenUnmask(t *testing.T) {

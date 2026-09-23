@@ -104,8 +104,8 @@ func main() {
 		os.Exit(1)
 	}
 	h := &handlers.Handler{Mgr: mgr, Repo: repo}
-	pool := queue.New(cfg.Queue.Workers, cfg.Queue.FastCapacity, cfg.Queue.HeavyCapacity, func(payload string) queue.Result {
-		res := mgr.Pipeline("").Process(payload)
+	pool := queue.New(cfg.Queue.Workers, cfg.Queue.FastCapacity, cfg.Queue.HeavyCapacity, func(system, payload string) queue.Result {
+		res := mgr.Pipeline(system).Process(payload)
 		return queue.Result{Masked: res.Masked, Types: res.Types, Tokens: res.Tokens}
 	})
 	h.Pool = pool

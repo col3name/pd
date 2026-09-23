@@ -12,6 +12,7 @@ var ErrQueueFull = errors.New("queue full")
 
 // Job is a unit of work submitted to the pool.
 type Job struct {
+	System  string
 	Payload string
 	Heavy   bool
 	done    chan Result
@@ -25,8 +26,8 @@ type Result struct {
 	Err    error
 }
 
-// Handler processes a payload into a Result.
-type Handler func(payload string) Result
+// Handler processes a system's payload into a Result.
+type Handler func(system, payload string) Result
 
 // Pool runs a fixed number of workers consuming from two queues: fast (short
 // payloads, low latency) and heavy (long payloads). Submit blocks until a
@@ -72,15 +73,15 @@ func (p *Pool) worker(h Handler) {
 
 func (p *Pool) run(h Handler, j Job) {
 	p.busy.Add(1)
-	res := h(j.Payload)
+	res := h(j.System, j.Payload)
 	p.busy.Add(-1)
 	j.done <- res
 }
 
 // Submit enqueues a job and waits for its result. It returns ErrQueueFull if
 // the context expires before a worker picks up the job.
-func (p *Pool) Submit(ctx context.Context, payload string, heavy bool) (Result, error) {
-	j := Job{Payload: payload, Heavy: heavy, done: make(chan Result, 1)}
+func (p *Pool) Submit(ctx context.Context, system, payload string, heavy bool) (Result, error) {
+	j := Job{System: system, Payload: payload, Heavy: heavy, done: make(chan Result, 1)}
 	select {
 	case <-ctx.Done():
 		return Result{}, ErrQueueFull

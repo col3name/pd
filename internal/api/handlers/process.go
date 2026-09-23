@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -16,6 +17,10 @@ import (
 	"github.com/kind-earthquake/pii-module/internal/queue"
 	"github.com/kind-earthquake/pii-module/internal/store"
 )
+
+// errSystemDisabled is returned when a request's system does not resolve to an
+// enabled pipeline.
+var errSystemDisabled = errors.New("system disabled")
 
 type ProcessRequest struct {
 	Payload     string `json:"payload"`
@@ -48,12 +53,16 @@ func (h *Handler) systemPipeline(name string) (*pipeline.Pipeline, bool) {
 }
 
 // runPipeline executes the pipeline directly or through the worker pool.
-func (h *Handler) runPipeline(ctx context.Context, p *pipeline.Pipeline, payload string) (pipeline.Result, error) {
+func (h *Handler) runPipeline(ctx context.Context, system, payload string) (pipeline.Result, error) {
 	if h.Pool == nil {
+		p, ok := h.systemPipeline(system)
+		if !ok {
+			return pipeline.Result{}, errSystemDisabled
+		}
 		return p.Process(payload), nil
 	}
 	heavy := len(payload) > h.Mgr.Config().Queue.HeavyThreshold
-	res, err := h.Pool.Submit(ctx, payload, heavy)
+	res, err := h.Pool.Submit(ctx, system, payload, heavy)
 	if err != nil {
 		return pipeline.Result{}, err
 	}
@@ -123,12 +132,12 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	p, ok := h.systemPipeline(req.System)
+	_, ok := h.systemPipeline(req.System)
 	if !ok {
 		http.Error(w, "system disabled", http.StatusForbidden)
 		return
 	}
-	res, err := h.runPipeline(r.Context(), p, req.Payload)
+	res, err := h.runPipeline(r.Context(), req.System, req.Payload)
 	if err != nil {
 		http.Error(w, "service busy", http.StatusServiceUnavailable)
 		w.Header().Set("Retry-After", "1")
