@@ -23,6 +23,9 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       <Input title="Пароль" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••" />
       <Button onClick={submit}>Войти</Button>
       {error && <div style={{ color: 'red' }}>{error}</div>}
+      <div style={{ marginTop: 12, fontSize: 12, color: '#888' }}>
+        По умолчанию: <code>admin</code> / <code>admin123</code>
+      </div>
     </Section>
   );
 }
