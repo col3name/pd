@@ -19,6 +19,9 @@ jobs:
             cd /opt/pd
             git fetch origin main
             git reset --hard origin/main
-            docker compose up -d --build
+            # Download NER model + vocab + ONNX Runtime (idempotent)
+            ./scripts/setup_ner.sh --skip-runtime || true
+            # Build with NER enabled and start with the NER config
+            WITH_NER=1 CONFIG_FILE=./configs/config.ner.yaml docker compose up -d --build
             sleep 3
             curl -sf http://localhost:5173/health || exit 1
