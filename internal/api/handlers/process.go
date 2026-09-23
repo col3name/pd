@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kind-earthquake/pii-module/internal/config"
@@ -126,12 +127,14 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		} else if errors.Is(err, store.ErrRedisUnavailable) {
-			// Redis is down and there is no local hit: cross-replica unmask
-			// cannot be served. Return 503 instead of re-masking.
-			http.Error(w, "unmask unavailable: storage degraded", http.StatusServiceUnavailable)
-			observability.RequestsTotal.WithLabelValues("unmask", "503").Inc()
-			observability.RequestLatency.WithLabelValues("unmask").Observe(time.Since(start).Seconds())
-			return
+			if looksLikeMasked(req.Payload) {
+				// Unmask attempt that can't be served without Redis.
+				http.Error(w, "unmask unavailable: storage degraded", http.StatusServiceUnavailable)
+				observability.RequestsTotal.WithLabelValues("unmask", "503").Inc()
+				observability.RequestLatency.WithLabelValues("unmask").Observe(time.Since(start).Seconds())
+				return
+			}
+			// New mask request: masking works without Redis, proceed.
 		}
 	}
 	_, ok := h.systemPipeline(req.System)
@@ -155,6 +158,31 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 	observability.RequestsTotal.WithLabelValues("mask", "200").Inc()
 	observability.RequestLatency.WithLabelValues("mask").Observe(time.Since(start).Seconds())
 	slog.Info("process: masked", "payload_id", req.PayloadID, "system", req.System, "types", res.Types, "latency_ms", time.Since(start).Milliseconds())
+}
+
+// looksLikeMasked reports whether the payload is a masked result (an unmask
+// attempt) rather than a fresh plaintext mask request. It matches the token
+// prefixes produced by token-mode masking and the redact-style placeholders.
+func looksLikeMasked(payload string) bool {
+	tokenPrefixes := []string{
+		"[PERSON_", "[PHONE_", "[EMAIL_", "[CARD_", "[PASSPORT_", "[DATE_",
+		"[INN_", "[FIO_", "[ADDRESS_", "[CVV_", "[PIN_", "[SNILS_",
+	}
+	for _, p := range tokenPrefixes {
+		if strings.Contains(payload, p) {
+			return true
+		}
+	}
+	redactTokens := []string{
+		"[ПАСПОРТ]", "[КАРТА]", "[EMAIL]", "[ТЕЛЕФОН]", "[ДАТА]", "[ИНН]",
+		"[ФИО]", "[CVV]", "[ПИН]", "[ДАТА_РОЖДЕНИЯ]", "[АДРЕС]", "[СНИЛС]",
+	}
+	for _, t := range redactTokens {
+		if strings.Contains(payload, t) {
+			return true
+		}
+	}
+	return false
 }
 
 // systemConfig looks up a consumer system by name (nil if absent).

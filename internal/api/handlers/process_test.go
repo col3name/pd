@@ -195,10 +195,13 @@ func TestProcessLayeredRedisDown(t *testing.T) {
 	var resp2 ProcessResponse
 	require.NoError(t, json.Unmarshal(rec2.Body.Bytes(), &resp2))
 	require.Equal(t, "паспорт 4509 123456", resp2.Result)
-	// A new payload_id with no local hit and Redis down cannot be correlated:
-	// the lookup returns ErrRedisUnavailable -> 503 (no re-mask).
+	// A new payload_id with no local hit and Redis down: masking still works
+	// (masking doesn't require Redis), so a fresh plaintext request is masked.
 	rec3 := doProcess(t, h, "паспорт 4509 123456", "deg-2")
-	require.Equal(t, http.StatusServiceUnavailable, rec3.Code)
+	require.Equal(t, http.StatusOK, rec3.Code)
+	var resp3 ProcessResponse
+	require.NoError(t, json.Unmarshal(rec3.Body.Bytes(), &resp3))
+	require.Contains(t, resp3.Result, "[ПАСПОРТ]")
 }
 
 func TestProcessLayeredRedisDownUnmaskNoLocalHit503(t *testing.T) {
@@ -213,9 +216,31 @@ func TestProcessLayeredRedisDownUnmaskNoLocalHit503(t *testing.T) {
 	h := &Handler{Mgr: m}
 	// Kill Redis before any local hit exists for this payload_id.
 	mr.Close()
-	// Unmask lookup with no local hit and Redis down -> 503, not re-mask.
-	rec := doProcess(t, h, "какая-то маска", "deg-miss")
+	// Unmask lookup (payload carries mask tokens) with no local hit and Redis
+	// down -> 503, not re-mask.
+	rec := doProcess(t, h, "Клиент [PERSON_001], паспорт [PASSPORT_002]", "deg-miss")
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+func TestProcessLayeredRedisDownNewMaskStillWorks(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	redisStore := store.NewRedis(client, time.Hour)
+	local := store.NewMemory(time.Hour, 1000)
+	breaker := store.NewBreaker(1, time.Minute)
+	layered := store.NewLayered(redisStore, local, breaker)
+	m, err := control.New(control.WithConfig(config.Default()), control.WithStore(layered))
+	require.NoError(t, err)
+	h := &Handler{Mgr: m}
+	// Kill Redis before any local hit exists for this payload_id.
+	mr.Close()
+	// A fresh mask request (plaintext, no mask tokens) with Redis down must
+	// still mask: masking works without Redis.
+	rec := doProcess(t, h, "паспорт 4509 123456", "deg-new")
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp ProcessResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Contains(t, resp.Result, "[ПАСПОРТ]")
 }
 
 func TestProcessSensitiveCooccurrence(t *testing.T) {
