@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-U="${1:-https://4feca4bc87e671.lhr.life}"
+U="${1:-http://5.42.118.103:5173}"
 PID="demo-$(date +%s)-$$"
 
 echo "=== 1. GET /health ==="
