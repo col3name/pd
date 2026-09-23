@@ -4,6 +4,7 @@ export interface SystemInfo {
   enabled: boolean;
   masking: string;
   allow_unmask: boolean;
+  require_key: boolean;
   pii: string[];
 }
 
@@ -36,6 +37,7 @@ export interface CreateSystemBody {
   name: string;
   enabled?: boolean;
   allow_unmask?: boolean;
+  require_key?: boolean;
   masking?: string;
   pii?: string[];
 }
@@ -43,6 +45,7 @@ export interface CreateSystemBody {
 export interface UpdateSystemBody {
   enabled?: boolean;
   allow_unmask?: boolean;
+  require_key?: boolean;
   masking?: string;
   pii?: string[];
 }

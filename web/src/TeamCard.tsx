@@ -19,7 +19,7 @@ export default function TeamCard({ team, knownTypes, onChanged }: Props) {
   };
 
   const update = useMutation({
-    mutationFn: (body: { enabled?: boolean; pii?: string[] }) => api.updateSystem(team.name, body),
+    mutationFn: (body: { enabled?: boolean; require_key?: boolean; pii?: string[] }) => api.updateSystem(team.name, body),
     onSuccess: invalidate,
   });
   const regen = useMutation({
@@ -69,6 +69,13 @@ export default function TeamCard({ team, knownTypes, onChanged }: Props) {
         after={<Switch checked={team.enabled} onChange={(e) => update.mutate({ enabled: e.target.checked })} />}
       >
         {team.enabled ? 'Включена' : 'Отключена'}
+      </Cell>
+
+      <Cell
+        subtitle={team.require_key ? 'Требуется access key' : 'Доступ без ключа'}
+        after={<Switch checked={team.require_key} onChange={(e) => update.mutate({ require_key: e.target.checked })} />}
+      >
+        {team.require_key ? 'Требовать access key' : 'Не требовать access key'}
       </Cell>
 
       <Section header="Обнаружение типов ПД">
