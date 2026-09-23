@@ -112,6 +112,19 @@ func TestSystemsCRUD(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, rec8.Code)
 }
 
+func TestCreateSystemRequireKey(t *testing.T) {
+	h := newDBTestHandler(t)
+	body, _ := json.Marshal(map[string]any{"name": "rk-sys", "require_key": true})
+	req := httptest.NewRequest("POST", "/v1/systems", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.CreateSystem(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	s, err := h.Repo.GetSystem(t.Context(), "rk-sys")
+	require.NoError(t, err)
+	require.True(t, s.RequireKey)
+}
+
 func TestCreateSystemMissingName(t *testing.T) {
 	h := newDBTestHandler(t)
 	body, _ := json.Marshal(map[string]any{"enabled": true})
