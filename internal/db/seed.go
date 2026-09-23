@@ -65,7 +65,7 @@ func (r *Repo) seedCombinations(ctx context.Context, combos []config.Combination
 	}
 	for _, c := range combos {
 		if _, err := r.pool.Exec(ctx,
-			`INSERT INTO combinations (type, requires, window) VALUES ($1,$2,$3)`,
+			`INSERT INTO combinations (type, requires, "window") VALUES ($1,$2,$3)`,
 			c.Type, fromTypes(c.Requires), c.Window); err != nil {
 			return fmt.Errorf("seed combination %s: %w", c.Type, err)
 		}

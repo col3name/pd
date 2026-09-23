@@ -62,7 +62,7 @@ func (r *Repo) migrate(ctx context.Context) error {
 			id        serial PRIMARY KEY,
 			type      text NOT NULL,
 			requires  text[] NOT NULL,
-			window    int NOT NULL DEFAULT 80
+			"window"  int NOT NULL DEFAULT 80
 		)`,
 		`CREATE TABLE IF NOT EXISTS admins (
 			login         text PRIMARY KEY,

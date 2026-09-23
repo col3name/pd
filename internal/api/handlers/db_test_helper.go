@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kind-earthquake/pii-module/internal/config"
@@ -18,6 +19,19 @@ func tEnv(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// cleanTables truncates all tables so each test starts from a clean state.
+func cleanTables(t *testing.T) {
+	t.Helper()
+	ctx := t.Context()
+	dsn := tEnv("PII_TEST_DSN", "postgres://pii:pii@localhost:5432/pii?sslmode=disable")
+	pool, err := pgxpool.New(ctx, dsn)
+	require.NoError(t, err)
+	defer pool.Close()
+	_, err = pool.Exec(ctx,
+		`TRUNCATE systems, rules, combinations, admins, sessions RESTART IDENTITY CASCADE`)
+	require.NoError(t, err)
 }
 
 // newDBTestHandler builds a Handler with a real Postgres repo. Skips if the
@@ -35,5 +49,6 @@ func newDBTestHandler(t *testing.T, mutate ...func(*config.Config)) *Handler {
 		t.Skipf("postgres unavailable: %v", err)
 	}
 	t.Cleanup(func() { _ = repo.Close() })
+	cleanTables(t)
 	return &Handler{Mgr: m, Repo: repo}
 }

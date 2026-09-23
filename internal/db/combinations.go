@@ -8,7 +8,7 @@ import (
 
 // ListCombinations returns all combination rules.
 func (r *Repo) ListCombinations(ctx context.Context) ([]config.CombinationConfig, error) {
-	rows, err := r.pool.Query(ctx, `SELECT type, requires, window FROM combinations ORDER BY id`)
+	rows, err := r.pool.Query(ctx, `SELECT type, requires, "window" FROM combinations ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}

@@ -7,13 +7,27 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kind-earthquake/pii-module/internal/detector"
 )
 
+// systemsRouter builds a chi router with the systems routes wired to h.
+func systemsRouter(h *Handler) http.Handler {
+	r := chi.NewRouter()
+	r.Get("/systems", h.ListSystems)
+	r.Post("/systems", h.CreateSystem)
+	r.Get("/systems/{name}", h.GetSystem)
+	r.Put("/systems/{name}", h.UpdateSystem)
+	r.Delete("/systems/{name}", h.DeleteSystem)
+	r.Post("/systems/{name}/regenerate-key", h.RegenerateKey)
+	return r
+}
+
 func TestSystemsCRUD(t *testing.T) {
 	h := newDBTestHandler(t)
+	router := systemsRouter(h)
 
 	// Create.
 	body, _ := json.Marshal(map[string]any{
@@ -23,9 +37,9 @@ func TestSystemsCRUD(t *testing.T) {
 		"masking":      "token",
 		"pii":          []detector.Type{detector.TypePhone, detector.TypeEmail},
 	})
-	req := httptest.NewRequest("POST", "/v1/systems", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/systems", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
-	h.CreateSystem(rec, req)
+	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	var created struct {
 		Name      string `json:"name"`
@@ -36,9 +50,9 @@ func TestSystemsCRUD(t *testing.T) {
 	require.NotEmpty(t, created.AccessKey)
 
 	// Get.
-	req2 := httptest.NewRequest("GET", "/v1/systems/chat", nil)
+	req2 := httptest.NewRequest("GET", "/systems/chat", nil)
 	rec2 := httptest.NewRecorder()
-	h.GetSystem(rec2, req2)
+	router.ServeHTTP(rec2, req2)
 	require.Equal(t, http.StatusOK, rec2.Code)
 	var view systemView
 	require.NoError(t, json.Unmarshal(rec2.Body.Bytes(), &view))
@@ -49,9 +63,9 @@ func TestSystemsCRUD(t *testing.T) {
 	require.Equal(t, "token", view.Masking)
 
 	// List.
-	req3 := httptest.NewRequest("GET", "/v1/systems", nil)
+	req3 := httptest.NewRequest("GET", "/systems", nil)
 	rec3 := httptest.NewRecorder()
-	h.ListSystems(rec3, req3)
+	router.ServeHTTP(rec3, req3)
 	require.Equal(t, http.StatusOK, rec3.Code)
 	var list []systemView
 	require.NoError(t, json.Unmarshal(rec3.Body.Bytes(), &list))
@@ -60,24 +74,24 @@ func TestSystemsCRUD(t *testing.T) {
 
 	// Update.
 	upd, _ := json.Marshal(map[string]any{"enabled": false})
-	req4 := httptest.NewRequest("PUT", "/v1/systems/chat", bytes.NewReader(upd))
+	req4 := httptest.NewRequest("PUT", "/systems/chat", bytes.NewReader(upd))
 	rec4 := httptest.NewRecorder()
-	h.UpdateSystem(rec4, req4)
+	router.ServeHTTP(rec4, req4)
 	require.Equal(t, http.StatusOK, rec4.Code)
 
 	// Verify update persisted.
-	req5 := httptest.NewRequest("GET", "/v1/systems/chat", nil)
+	req5 := httptest.NewRequest("GET", "/systems/chat", nil)
 	rec5 := httptest.NewRecorder()
-	h.GetSystem(rec5, req5)
+	router.ServeHTTP(rec5, req5)
 	require.Equal(t, http.StatusOK, rec5.Code)
 	var view2 systemView
 	require.NoError(t, json.Unmarshal(rec5.Body.Bytes(), &view2))
 	require.False(t, view2.Enabled)
 
 	// Regenerate key.
-	req6 := httptest.NewRequest("POST", "/v1/systems/chat/regenerate-key", nil)
+	req6 := httptest.NewRequest("POST", "/systems/chat/regenerate-key", nil)
 	rec6 := httptest.NewRecorder()
-	h.RegenerateKey(rec6, req6)
+	router.ServeHTTP(rec6, req6)
 	require.Equal(t, http.StatusOK, rec6.Code)
 	var regen struct {
 		AccessKey string `json:"access_key"`
@@ -86,15 +100,15 @@ func TestSystemsCRUD(t *testing.T) {
 	require.NotEmpty(t, regen.AccessKey)
 
 	// Delete.
-	req7 := httptest.NewRequest("DELETE", "/v1/systems/chat", nil)
+	req7 := httptest.NewRequest("DELETE", "/systems/chat", nil)
 	rec7 := httptest.NewRecorder()
-	h.DeleteSystem(rec7, req7)
+	router.ServeHTTP(rec7, req7)
 	require.Equal(t, http.StatusNoContent, rec7.Code)
 
 	// Get after delete -> 404.
-	req8 := httptest.NewRequest("GET", "/v1/systems/chat", nil)
+	req8 := httptest.NewRequest("GET", "/systems/chat", nil)
 	rec8 := httptest.NewRecorder()
-	h.GetSystem(rec8, req8)
+	router.ServeHTTP(rec8, req8)
 	require.Equal(t, http.StatusNotFound, rec8.Code)
 }
 
