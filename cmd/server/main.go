@@ -26,6 +26,7 @@ import (
 	"github.com/kind-earthquake/pii-module/internal/detector"
 	"github.com/kind-earthquake/pii-module/internal/ner"
 	"github.com/kind-earthquake/pii-module/internal/observability"
+	"github.com/kind-earthquake/pii-module/internal/queue"
 	"github.com/kind-earthquake/pii-module/internal/store"
 )
 
@@ -42,9 +43,16 @@ func main() {
 	ttl := time.Duration(cfg.Store.TTLHours) * time.Hour
 	var st store.Store
 	var redisClient *redis.Client
-	if cfg.Store.Type == "redis" {
+	if cfg.Store.Type == "redis" || cfg.Store.Type == "layered" {
 		redisClient = redis.NewClient(redisOptions(cfg.Store.RedisURL))
-		st = store.NewRedis(redisClient, ttl)
+		redisStore := store.NewRedis(redisClient, ttl)
+		if cfg.Store.Type == "layered" {
+			local := store.NewMemory(ttl, cfg.Store.Capacity)
+			breaker := store.NewBreaker(cfg.Store.Circuit.Failures, time.Duration(cfg.Store.Circuit.CooldownSeconds)*time.Second)
+			st = store.NewLayered(redisStore, local, breaker)
+		} else {
+			st = redisStore
+		}
 	} else {
 		st = store.NewMemory(ttl, cfg.Store.Capacity)
 	}
@@ -96,6 +104,12 @@ func main() {
 		os.Exit(1)
 	}
 	h := &handlers.Handler{Mgr: mgr, Repo: repo}
+	pool := queue.New(cfg.Queue.Workers, cfg.Queue.FastCapacity, cfg.Queue.HeavyCapacity, func(payload string) queue.Result {
+		res := mgr.Pipeline("").Process(payload)
+		return queue.Result{Masked: res.Masked, Types: res.Types, Tokens: res.Tokens}
+	})
+	h.Pool = pool
+	defer pool.Close()
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/kind-earthquake/pii-module/internal/db"
 	"github.com/kind-earthquake/pii-module/internal/observability"
 	"github.com/kind-earthquake/pii-module/internal/pipeline"
+	"github.com/kind-earthquake/pii-module/internal/queue"
 	"github.com/kind-earthquake/pii-module/internal/store"
 )
 
@@ -29,6 +31,7 @@ type ProcessResponse struct {
 type Handler struct {
 	Mgr  *control.Manager
 	Repo *db.Repo
+	Pool *queue.Pool
 }
 
 // systemPipeline returns the per-system pipeline. The second return value is
@@ -42,6 +45,19 @@ func (h *Handler) systemPipeline(name string) (*pipeline.Pipeline, bool) {
 		return nil, false
 	}
 	return h.Mgr.Pipeline(name), true
+}
+
+// runPipeline executes the pipeline directly or through the worker pool.
+func (h *Handler) runPipeline(ctx context.Context, p *pipeline.Pipeline, payload string) (pipeline.Result, error) {
+	if h.Pool == nil {
+		return p.Process(payload), nil
+	}
+	heavy := len(payload) > h.Mgr.Config().Queue.HeavyThreshold
+	res, err := h.Pool.Submit(ctx, payload, heavy)
+	if err != nil {
+		return pipeline.Result{}, err
+	}
+	return pipeline.Result{Masked: res.Masked, Types: res.Types, Tokens: res.Tokens}, nil
 }
 
 // Process handles masking (new payload_id) and unmasking (existing payload_id).
@@ -112,7 +128,12 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "system disabled", http.StatusForbidden)
 		return
 	}
-	res := p.Process(req.Payload)
+	res, err := h.runPipeline(r.Context(), p, req.Payload)
+	if err != nil {
+		http.Error(w, "service busy", http.StatusServiceUnavailable)
+		w.Header().Set("Retry-After", "1")
+		return
+	}
 	for _, t := range res.Types {
 		observability.DetectedTotal.WithLabelValues(t).Inc()
 	}

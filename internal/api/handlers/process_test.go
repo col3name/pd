@@ -15,6 +15,7 @@ import (
 	"github.com/kind-earthquake/pii-module/internal/config"
 	"github.com/kind-earthquake/pii-module/internal/control"
 	"github.com/kind-earthquake/pii-module/internal/detector"
+	"github.com/kind-earthquake/pii-module/internal/queue"
 	"github.com/kind-earthquake/pii-module/internal/store"
 )
 
@@ -36,6 +37,21 @@ func doProcess(t *testing.T, h *Handler, payload, id string) *httptest.ResponseR
 	rec := httptest.NewRecorder()
 	h.Process(rec, req)
 	return rec
+}
+
+func TestProcessThroughPool(t *testing.T) {
+	h := newTestHandler(t)
+	// Attach a pool to the handler.
+	h.Pool = queue.New(4, 64, 16, func(payload string) queue.Result {
+		res := h.Mgr.Pipeline("").Process(payload)
+		return queue.Result{Masked: res.Masked, Types: res.Types, Tokens: res.Tokens}
+	})
+	defer h.Pool.Close()
+	rec := doProcess(t, h, "паспорт 4509 123456", "pool-1")
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp ProcessResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Contains(t, resp.Result, "[ПАСПОРТ]")
 }
 
 func TestProcessMaskThenUnmask(t *testing.T) {
