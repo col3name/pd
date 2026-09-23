@@ -619,6 +619,7 @@ bcrypt-хэш в таблице `admins`).
 | `/v1/systems/{name}` | `DELETE` | Удалить → `204`. |
 | `/v1/systems/{name}/regenerate-key` | `POST` | Новый access_key → `{"access_key"}`. |
 | `/v1/config` | `GET` | Read-only: `rev`, `masking`, `systems`, `rules`, `combinations`, `known_types`. |
+| `/v1/logs` | `GET` | Скачать файл логов (`pii-gateway.log`), если задан `log_file` в конфиге. |
 
 Все эндпоинты, кроме `/v1/auth/login`, требуют заголовок
 `Authorization: Bearer <token>`. CORS настраивается env `ADMIN_ORIGIN`

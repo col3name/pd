@@ -1,6 +1,7 @@
 # version2/configs/config.yaml
 port: 8080
 allow_unmask: true
+log_file: "/srv/logs/pii-gateway.log"   # путь для логов (скачивание в админке); пусто = только stderr
 store:
   type: memory          # "memory" | "redis"
   ttl_hours: 24

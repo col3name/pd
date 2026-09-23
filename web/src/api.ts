@@ -92,4 +92,5 @@ export const api = {
   deleteSystem: (name: string) => request<void>(`/v1/systems/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   regenerateKey: (name: string) =>
     request<{ access_key: string }>(`/v1/systems/${encodeURIComponent(name)}/regenerate-key`, { method: 'POST' }),
+  logsUrl: () => '/v1/logs',
 };

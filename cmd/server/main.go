@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -38,6 +39,20 @@ func main() {
 	if err != nil {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
+	}
+
+	// Optional log file: write structured logs to a file (for admin download)
+	// in addition to stderr. Empty log_file keeps stderr-only logging.
+	var logFile *os.File
+	if cfg.LogFile != "" {
+		logFile, err = os.OpenFile(cfg.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err != nil {
+			slog.Error("failed to open log file", "path", cfg.LogFile, "error", err)
+			os.Exit(1)
+		}
+		defer logFile.Close()
+		multi := io.MultiWriter(os.Stderr, logFile)
+		slog.SetDefault(slog.New(slog.NewJSONHandler(multi, nil)))
 	}
 
 	ttl := time.Duration(cfg.Store.TTLHours) * time.Hour
@@ -125,6 +140,7 @@ func main() {
 		r.Group(func(r chi.Router) {
 			r.Use(requireAuth(h))
 			r.Get("/config", h.GetConfig)
+			r.Get("/logs", h.GetLogs)
 			r.Get("/systems", h.ListSystems)
 			r.Post("/systems", h.CreateSystem)
 			r.Get("/systems/{name}", h.GetSystem)

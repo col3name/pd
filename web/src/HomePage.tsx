@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Button, Cell, Input, List, Section } from '@telegram-apps/telegram-ui';
-import { api, type SystemInfo } from './api';
+import { api, getToken, type SystemInfo } from './api';
 
 export default function HomePage() {
   const qc = useQueryClient();
@@ -20,6 +20,25 @@ export default function HomePage() {
   const copy = (v: string) => {
     navigator.clipboard?.writeText(v);
     setToast('Скопировано в буфер обмена');
+  };
+
+  const downloadLogs = async () => {
+    try {
+      const res = await fetch(api.logsUrl(), {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'pii-gateway.log';
+      a.click();
+      URL.revokeObjectURL(url);
+      setToast('Логи скачаны');
+    } catch (e) {
+      setToast(`Ошибка скачивания: ${String(e)}`);
+    }
   };
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['systems'] });
@@ -101,6 +120,12 @@ export default function HomePage() {
   -H 'Content-Type: application/json' \\
   -H 'X-API-Key: <access_key>' \\
   -d '{"payload":"паспорт 4509 123456","payload_id":"demo1","system":"chat"}'`)}>Копировать</Button>
+        </Cell>
+      </Section>
+
+      <Section header="Логи">
+        <Cell subtitle="скачать файл логов сервера (pii-gateway.log)">
+          <Button size="s" onClick={downloadLogs}>Скачать логи</Button>
         </Cell>
       </Section>
 

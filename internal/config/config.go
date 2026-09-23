@@ -149,6 +149,7 @@ type Config struct {
 	Combinations   []CombinationConfig `yaml:"combinations"`
 	Queue          QueueConfig         `yaml:"queue"`
 	Autoscale      AutoscaleConfig     `yaml:"autoscale"`
+	LogFile        string              `yaml:"log_file"` // path to write logs (for admin download); empty = stderr only
 }
 
 // Default returns the v1-compatible default configuration.

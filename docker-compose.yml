@@ -22,6 +22,7 @@ services:
       ONNXRUNTIME_SHARED_LIBRARY_PATH: "/srv/models/ner/onnxruntime-linux-x64-1.17.1/lib/libonnxruntime.so"
     volumes:
       - ./models:/srv/models:ro   # model.onnx + vocab.txt + onnxruntime (from scripts/setup_ner.sh)
+      - ./logs:/srv/logs           # log file for admin download (config.log_file)
       # When WITH_NER=1, use the NER-enabled config (ml.enabled=true).
       - ${CONFIG_FILE:-./configs/config.yaml}:/srv/configs/config.yaml:ro
     restart: unless-stopped
