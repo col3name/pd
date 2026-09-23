@@ -28,3 +28,11 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     restart: unless-stopped
+
+  admin:
+    build: ./web
+    ports:
+      - "5173:80"
+    depends_on:
+      - pii-module-v2
+    restart: unless-stopped
