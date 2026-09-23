@@ -45,3 +45,27 @@ func TestStructuredRulesCaseInsensitive(t *testing.T) {
 		}
 	}
 }
+
+func TestRuleFromConfigValid(t *testing.T) {
+	r, err := RuleFromConfig("СНИЛС", `\d{3}-\d{3}-\d{3}\s\d{2}`, "", "", 0, 0.99, "")
+	require.NoError(t, err)
+	require.Equal(t, Type("СНИЛС"), r.Type)
+	require.Equal(t, float32(0.99), r.Confidence)
+
+	d := New(StructuredRules(), WithExtraRules([]Rule{r}))
+	spans := d.Detect("снилс 123-456-789 01")
+	require.NotEmpty(t, spans)
+}
+
+func TestRuleFromConfigBadRegex(t *testing.T) {
+	_, err := RuleFromConfig("X", "(", "", "", 0, 0, "")
+	require.Error(t, err)
+}
+
+func TestKnownTypes(t *testing.T) {
+	types := KnownTypes()
+	require.Len(t, types, len(TypeList))
+	for i := 1; i < len(types); i++ {
+		require.Less(t, types[i-1], types[i], "KnownTypes must be sorted")
+	}
+}

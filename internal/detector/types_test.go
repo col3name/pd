@@ -30,5 +30,10 @@ func TestTypePlaceholder(t *testing.T) {
 		require.Equal(t, want, typ.Placeholder(), "placeholder for %s", typ)
 		require.True(t, typ.Valid(), "valid for %s", typ)
 	}
-	require.False(t, Type("UNKNOWN").Valid())
+}
+
+func TestTypeUnknownPlaceholderFallback(t *testing.T) {
+	got := Type("СНИЛС").Placeholder()
+	require.Equal(t, "[СНИЛС]", got)
+	require.True(t, Type("СНИЛС").Valid())
 }

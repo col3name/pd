@@ -26,6 +26,11 @@ func WithNER(n NERDetector) Option {
 	return func(d *Detector) { d.ner = n }
 }
 
+// WithExtraRules appends user-defined rules to the built-in core rules.
+func WithExtraRules(rules []Rule) Option {
+	return func(d *Detector) { d.rules = append(d.rules, rules...) }
+}
+
 // New returns a Detector using the given rules and options.
 func New(rules []Rule, opts ...Option) *Detector {
 	d := &Detector{rules: rules}

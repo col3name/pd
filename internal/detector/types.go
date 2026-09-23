@@ -3,6 +3,15 @@ package detector
 // Type identifies a category of personal data.
 type Type string
 
+// TypeList is the full set of built-in PII types.
+var TypeList = []Type{
+	TypeAddress, TypeBirthCertificate, TypeBirthDate, TypeBirthPlace,
+	TypeCard, TypeCardholder, TypeCitizenship, TypeCVV, TypeDate,
+	TypeDeptCode, TypeDriverLicense, TypeEmail, TypeFIO, TypeForeignPassport,
+	TypeINN, TypeIssuer, TypeMilitaryID, TypePassport, TypePassportIssue,
+	TypePhone, TypePIN,
+}
+
 const (
 	TypeFIO              Type = "ФИО"
 	TypeDate             Type = "ДАТА"
@@ -53,11 +62,12 @@ var placeholders = map[Type]string{
 
 // Placeholder returns the masking token for the type.
 func (t Type) Placeholder() string {
-	return placeholders[t]
+	if p, ok := placeholders[t]; ok {
+		return p
+	}
+	return "[" + string(t) + "]"
 }
 
-// Valid reports whether t is a known PII type.
-func (t Type) Valid() bool {
-	_, ok := placeholders[t]
-	return ok
-}
+// Valid reports whether t can be masked. Unknown types (from overlay rules)
+// are valid: they render as [TYPE] via the placeholder fallback.
+func (t Type) Valid() bool { return t != "" }

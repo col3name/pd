@@ -1,6 +1,10 @@
 package detector
 
-import "regexp"
+import (
+	"fmt"
+	"regexp"
+	"sort"
+)
 
 // Rule binds a compiled regex to a PII type. Priority breaks ties when two
 // rules match the same span with equal length: higher priority wins.
@@ -78,4 +82,43 @@ func StructuredRules() []Rule {
 		{TypeCardholder, nil, 0, nil,
 			regexp.MustCompile(`(?i)(?:держатель\s+карты|cardholder|имя\s+держателя)[:\s]+([а-яё]{2,30}\s+[а-яё]{2,30})`), "держател", 0},
 	}
+}
+
+// RuleFromConfig compiles a user-supplied rule (from the config rules section).
+// Detector must not import config (config imports detector), so parameters are
+// passed as plain values.
+func RuleFromConfig(typeName, regex, contextRe, captureRe string, priority int, confidence float32, keyword string) (Rule, error) {
+	r := Rule{
+		Type:       Type(typeName),
+		Priority:   priority,
+		Keyword:    keyword,
+		Confidence: confidence,
+	}
+	var err error
+	if regex != "" {
+		if r.Re, err = regexp.Compile(regex); err != nil {
+			return Rule{}, fmt.Errorf("rule %s: bad regex: %w", typeName, err)
+		}
+	} else {
+		return Rule{}, fmt.Errorf("rule %s: regex is required", typeName)
+	}
+	if contextRe != "" {
+		if r.ContextRe, err = regexp.Compile(contextRe); err != nil {
+			return Rule{}, fmt.Errorf("rule %s: bad context: %w", typeName, err)
+		}
+	}
+	if captureRe != "" {
+		if r.CaptureRe, err = regexp.Compile(captureRe); err != nil {
+			return Rule{}, fmt.Errorf("rule %s: bad capture: %w", typeName, err)
+		}
+	}
+	return r, nil
+}
+
+// KnownTypes returns every built-in PII type, sorted, for UI pickers.
+func KnownTypes() []Type {
+	types := make([]Type, 0, len(TypeList))
+	types = append(types, TypeList...)
+	sort.Slice(types, func(i, j int) bool { return types[i] < types[j] })
+	return types
 }
