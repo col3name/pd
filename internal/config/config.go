@@ -175,4 +175,7 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("MASK_MODE"); v != "" {
 		cfg.Masking.Mode = v
 	}
+	if v := os.Getenv("DATABASE_DSN"); v != "" {
+		cfg.Database.DSN = v
+	}
 }

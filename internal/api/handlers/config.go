@@ -33,8 +33,16 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	for _, s := range systems {
 		view.Systems = append(view.Systems, toView(s))
 	}
-	rules, _ := h.Repo.ListRules(r.Context())
-	combos, _ := h.Repo.ListCombinations(r.Context())
+	rules, err := h.Repo.ListRules(r.Context())
+	if err != nil {
+		http.Error(w, "internal", http.StatusInternalServerError)
+		return
+	}
+	combos, err := h.Repo.ListCombinations(r.Context())
+	if err != nil {
+		http.Error(w, "internal", http.StatusInternalServerError)
+		return
+	}
 	view.Rules = rules
 	view.Combinations = combos
 	writeJSON(w, view)
@@ -50,7 +58,7 @@ func CORS(origin string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", originVal)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Key, X-API-Key")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
 				return

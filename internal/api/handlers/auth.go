@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
-
-	"github.com/kind-earthquake/pii-module/internal/db"
 )
 
 const sessionTTL = 24 * time.Hour
@@ -24,7 +22,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ok, err := h.Repo.VerifyAdmin(r.Context(), in.Login, in.Password)
-	if err != nil || !ok {
+	if err != nil {
+		http.Error(w, "internal", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -54,7 +56,11 @@ func (h *Handler) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		ok, err := h.Repo.ValidateSession(r.Context(), HashKey(token))
-		if err != nil || !ok {
+		if err != nil {
+			http.Error(w, "internal", http.StatusInternalServerError)
+			return
+		}
+		if !ok {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -74,7 +80,9 @@ func bearerToken(r *http.Request) string {
 // GenerateAccessKey returns a random 32-hex-char key.
 func GenerateAccessKey() string {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand unavailable: " + err.Error())
+	}
 	return hex.EncodeToString(b)
 }
 
@@ -83,5 +91,3 @@ func HashKey(key string) string {
 	sum := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(sum[:])
 }
-
-var _ = db.ErrNotFound // keep import if unused

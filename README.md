@@ -241,40 +241,49 @@ docker compose --profile redis up -d --build
 # и смонтировать конфиг: -v ./configs/config.redis.yaml:/srv/configs/config.yaml:ro
 ```
 
-## Live-настройка (hot-reload) через admin API
+## Админка и управление системами (PostgreSQL)
 
-Конфиг читается из YAML при старте, но менять его можно на лету — без рестарта и
-без правки кода. `PUT /v1/config` атомарно пересобирает детектор, контекст, whitelist
-и pipeline'ы систем. Запись защищена заголовком `X-Admin-Key` (значение —
-`config.Admin.Key` из YAML, по умолчанию `pii-admin-key`).
+Системы-потребители, overlay-правила и комбинации хранятся в PostgreSQL
+(`config.Database.DSN`). При первом старте пустые таблицы заполняются из
+`config.yaml` (seed); дальше БД — источник истины. Админка защищена логином и
+паролем (`config.Admin.Login`/`Password`, по умолчанию `admin`/`admin123`,
+bcrypt-хэш в таблице `admins`).
 
 | Эндпоинт | Метод | Описание |
 |----------|-------|----------|
-| `/v1/config` | `GET` | Текущий конфиг (`rev`, `masking`, `systems`, `rules`, `combinations`, `known_types`). Ключи API-систем **не возвращаются** — только флаг `api_key_set`. |
-| `/v1/config` | `PUT` | Запись конфига, тело — тот же JSON-вид, что у `GET` (плюс опциональный `api_key` на систему). Требует `X-Admin-Key`; ответ `{"rev": N}`. |
-| `/v1/config/rules` | `GET` | Список известных типов ПДН. |
+| `/v1/auth/login` | `POST` | Вход: `{"login","password"}` → `{"token"}`. |
+| `/v1/auth/logout` | `POST` | Выход (Bearer-токен). |
+| `/v1/systems` | `GET` | Список систем (`name`, `api_key_set`, `enabled`, `allow_unmask`, `masking`, `pii`). |
+| `/v1/systems` | `POST` | Создать систему → `{"name","access_key"}` (ключ показывается один раз). |
+| `/v1/systems/{name}` | `GET` | Одна система. |
+| `/v1/systems/{name}` | `PUT` | Обновить (`enabled`, `allow_unmask`, `masking`, `pii`) → `{"rev"}`. |
+| `/v1/systems/{name}` | `DELETE` | Удалить → `204`. |
+| `/v1/systems/{name}/regenerate-key` | `POST` | Новый access_key → `{"access_key"}`. |
+| `/v1/config` | `GET` | Read-only: `rev`, `masking`, `systems`, `rules`, `combinations`, `known_types`. |
 
-CORS для admin-эндпоинтов настраивается env `ADMIN_ORIGIN` (по умолчанию `*`) — чтобы
-SPA в `web/` могла читать/писать конфиг из браузера.
+Все эндпоинты, кроме `/v1/auth/login`, требуют заголовок
+`Authorization: Bearer <token>`. CORS настраивается env `ADMIN_ORIGIN`
+(по умолчанию `*`).
 
-Пример: включить комбинацию «ПИН маскируется только рядом с картой»:
+Пример: создать систему и использовать её ключ в `/process`:
 
 ```bash
-curl -s -X PUT http://localhost:8080/v1/config \
-  -H 'X-Admin-Key: pii-admin-key' \
+# Вход
+TOKEN=$(curl -s -X POST http://localhost:8080/v1/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"combinations":[{"type":"ПИН","requires":["КАРТА"],"window":80}]}'
-# → {"rev":1}
+  -d '{"login":"admin","password":"admin123"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
 
-# теперь одиночный ПИН не маскируется…
-curl -s -X POST http://localhost:8080/process \
-  -d '{"payload":"пин 1234","payload_id":"cdemo1"}'
-# → {"result":"пин 1234"}
+# Создать систему — ключ вернётся один раз
+curl -s -X POST http://localhost:8080/v1/systems \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"chat","enabled":true,"allow_unmask":true,"masking":"token"}'
+# → {"access_key":"<32 hex>","name":"chat"}
 
-# …а рядом с картой — маскируются оба типа
+# Маскирование через /process с ключом системы
 curl -s -X POST http://localhost:8080/process \
-  -d '{"payload":"карта 4276 1234 5678 9012, пин 1234","payload_id":"cdemo2"}'
-# → {"result":"карта [КАРТА], пин [ПИН]"}
+  -H "X-API-Key: <access_key>" \
+  -d '{"payload":"паспорт 4509 123456","payload_id":"demo1","system":"chat"}'
+# → {"result":"паспорт [PASSPORT_001]"}
 ```
 
 Тот же механизм покрывает overlay-правила: новые типы ПДН (например, СНИЛС из

@@ -14,7 +14,7 @@ import (
 // newTestRepo connects to a real Postgres. Skip if PII_TEST_DSN is unset.
 func newTestRepo(t *testing.T) *Repo {
 	t.Helper()
-	dsn := tEnv("PII_TEST_DSN", "postgres://pii:pii@localhost:5432/pii?sslmode=disable")
+	dsn := tEnv("PII_TEST_DSN", "postgres://pii:pii@localhost:5432/pii_test?sslmode=disable")
 	ctx := context.Background()
 	r, err := New(ctx, dsn)
 	if err != nil {

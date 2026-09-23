@@ -25,7 +25,7 @@ func tEnv(k, def string) string {
 func cleanTables(t *testing.T) {
 	t.Helper()
 	ctx := t.Context()
-	dsn := tEnv("PII_TEST_DSN", "postgres://pii:pii@localhost:5432/pii?sslmode=disable")
+	dsn := tEnv("PII_TEST_DSN", "postgres://pii:pii@localhost:5432/pii_test?sslmode=disable")
 	pool, err := pgxpool.New(ctx, dsn)
 	require.NoError(t, err)
 	defer pool.Close()
@@ -44,7 +44,7 @@ func newDBTestHandler(t *testing.T, mutate ...func(*config.Config)) *Handler {
 	}
 	m, err := control.New(control.WithConfig(cfg), control.WithStore(store.NewMemory(time.Hour, 1000)))
 	require.NoError(t, err)
-	repo, err := db.New(t.Context(), tEnv("PII_TEST_DSN", "postgres://pii:pii@localhost:5432/pii?sslmode=disable"))
+	repo, err := db.New(t.Context(), tEnv("PII_TEST_DSN", "postgres://pii:pii@localhost:5432/pii_test?sslmode=disable"))
 	if err != nil {
 		t.Skipf("postgres unavailable: %v", err)
 	}

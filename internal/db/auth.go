@@ -2,8 +2,10 @@ package db
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -21,11 +23,16 @@ func (r *Repo) SeedAdmin(ctx context.Context, login, password string) error {
 }
 
 // VerifyAdmin checks a login/password against the stored bcrypt hash.
+// Returns (false, nil) only when the login does not exist or the password is
+// wrong; a real DB error is returned so callers can distinguish 401 from 500.
 func (r *Repo) VerifyAdmin(ctx context.Context, login, password string) (bool, error) {
 	var hash string
 	err := r.pool.QueryRow(ctx, `SELECT password_hash FROM admins WHERE login=$1`, login).Scan(&hash)
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil // no such admin
+	}
+	if err != nil {
+		return false, err
 	}
 	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
 		return false, nil
@@ -42,12 +49,17 @@ func (r *Repo) CreateSession(ctx context.Context, tokenHash, login string, ttl t
 }
 
 // ValidateSession reports whether a token hash is present and unexpired.
+// Returns (false, nil) only when the token is absent or expired; a real DB
+// error is returned so callers can distinguish 401 from 500.
 func (r *Repo) ValidateSession(ctx context.Context, tokenHash string) (bool, error) {
 	var expires time.Time
 	err := r.pool.QueryRow(ctx,
 		`SELECT expires_at FROM sessions WHERE token_hash=$1`, tokenHash).Scan(&expires)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil // no such session
+	}
 	if err != nil {
-		return false, nil
+		return false, err
 	}
 	return time.Now().Before(expires), nil
 }
