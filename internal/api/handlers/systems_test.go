@@ -34,6 +34,7 @@ func TestSystemsCRUD(t *testing.T) {
 		"name":         "chat",
 		"enabled":      true,
 		"allow_unmask": true,
+		"require_key":  true,
 		"masking":      "token",
 		"pii":          []detector.Type{detector.TypePhone, detector.TypeEmail},
 	})
@@ -60,6 +61,7 @@ func TestSystemsCRUD(t *testing.T) {
 	require.True(t, view.APIKeySet)
 	require.True(t, view.Enabled)
 	require.True(t, view.AllowUnmask)
+	require.True(t, view.RequireKey)
 	require.Equal(t, "token", view.Masking)
 
 	// List.
