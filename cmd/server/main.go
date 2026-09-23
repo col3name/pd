@@ -89,7 +89,11 @@ func main() {
 		r.Put("/config", h.PutConfig)
 		r.Get("/config/rules", h.GetConfigRules)
 	})
-	r.With(handlers.CORS(adminOrigin())).Post("/process", h.Process)
+	r.Route("/process", func(r chi.Router) {
+		r.Use(handlers.CORS(adminOrigin()))
+		r.Post("/", h.Process)
+		r.Options("/", func(http.ResponseWriter, *http.Request) {})
+	})
 	// OpenAPI: сама спецификация + интерактивный Swagger UI (Try it out).
 	r.Get("/openapi.yaml", openapi.SpecHandler())
 	r.Get("/process_api.yaml", openapi.SpecHandler())
