@@ -63,6 +63,23 @@ func TestProcessMaskThenUnmask(t *testing.T) {
 	require.Equal(t, "паспорт 4509 123456", resp2.Result)
 }
 
+func TestProcessMaskRetryReturnsSameMask(t *testing.T) {
+	h := newTestHandler(t)
+	// Direct check is retried by the load tester with the SAME payload after a
+	// timeout: the endpoint must return the saved mask again, not the original.
+	rec := doProcess(t, h, "паспорт 4509 123456", "retry-1")
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp ProcessResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Contains(t, resp.Result, "[ПАСПОРТ]")
+
+	rec2 := doProcess(t, h, "паспорт 4509 123456", "retry-1")
+	require.Equal(t, http.StatusOK, rec2.Code)
+	var resp2 ProcessResponse
+	require.NoError(t, json.Unmarshal(rec2.Body.Bytes(), &resp2))
+	require.Equal(t, resp.Result, resp2.Result)
+}
+
 func TestProcessTokenModeMasksAndUnmasks(t *testing.T) {
 	h := newTestHandler(t)
 	// The pipeline captures the masking mode at construction, so rebuild it in
@@ -246,14 +263,18 @@ func TestProcessSystemAPIKey(t *testing.T) {
 	rec2 := doProcessSystem(t, h, "паспорт 4509 123456", "sys-5", "chat", "wrong")
 	require.Equal(t, http.StatusUnauthorized, rec2.Code)
 
-	// Верный ключ -> 200.
+	// Верный ключ -> 200 (маскирование).
 	rec3 := doProcessSystem(t, h, "паспорт 4509 123456", "sys-5", "chat", "sekret")
 	require.Equal(t, http.StatusOK, rec3.Code)
+	var resp3 ProcessResponse
+	require.NoError(t, json.Unmarshal(rec3.Body.Bytes(), &resp3))
+	require.Contains(t, resp3.Result, "[ПАСПОРТ]")
 
-	// Внутри системы с allow_unmask=true демаскируется по тому же ключу.
-	rec4 := doProcessSystem(t, h, "паспорт 4509 123456", "sys-5", "chat", "sekret")
+	// Внутри системы с allow_unmask=true демаскируется по тому же ключу:
+	// повторный запрос с МАСКОЙ (результат маскирования) возвращает оригинал.
+	rec4 := doProcessSystem(t, h, resp3.Result, "sys-5", "chat", "sekret")
 	require.Equal(t, http.StatusOK, rec4.Code)
-	var resp ProcessResponse
-	require.NoError(t, json.Unmarshal(rec4.Body.Bytes(), &resp))
-	require.Equal(t, "паспорт 4509 123456", resp.Result)
+	var resp4 ProcessResponse
+	require.NoError(t, json.Unmarshal(rec4.Body.Bytes(), &resp4))
+	require.Equal(t, "паспорт 4509 123456", resp4.Result)
 }

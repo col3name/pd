@@ -69,11 +69,17 @@ curl -X POST http://localhost:8080/process \
   -d '{"payload":"паспорт 4509 123456, email test@example.com","payload_id":"test-1"}'
 # → {"result":"паспорт [ПАСПОРТ], email [EMAIL]"}
 
-# Демаскирование — тот же payload_id возвращает оригинал байт-в-байт
+# Демаскирование — тот же payload_id + наша маска возвращает оригинал байт-в-байт
 curl -X POST http://localhost:8080/process \
   -H "Content-Type: application/json" \
-  -d '{"payload":"что угодно","payload_id":"test-1"}'
+  -d '{"payload":"паспорт [ПАСПОРТ], email [EMAIL]","payload_id":"test-1"}'
 # → {"result":"паспорт 4509 123456, email test@example.com"}
+
+# Идемпотентность: повтор прямого шага (та же исходная строка) возвращает ту же маску
+curl -X POST http://localhost:8080/process \
+  -H "Content-Type: application/json" \
+  -d '{"payload":"паспорт 4509 123456, email test@example.com","payload_id":"test-1"}'
+# → {"result":"паспорт [ПАСПОРТ], email [EMAIL]"}
 ```
 
 Готовый сценарий демо для жюри — `scripts/curl_demo.sh` (health, маскирование,
@@ -96,10 +102,13 @@ curl -X POST http://localhost:8080/process \
 
 Логика:
 - **Новый `payload_id`** → маскирование: `result` — это `Pipeline.Result.Masked`
-  (redact: `[КЛАСС]`, token: `[LABEL_NNN]`). Оригинал и token-карта сохраняются в store.
+  (redact: `[КЛАСС]`, token: `[LABEL_NNN]`). Оригинал, маска и token-карта сохраняются в store.
 - **Существующий `payload_id`** (и `allow_unmask: true` для системы, см. «Системы-потребители»)
-  → демаскирование: `result` — `store.Entry.Original`, т.е. исходная строка **байт-в-байт**,
-  включая не-ПД подстроки.
+  → корреляция по содержимому payload, эндпоинт идемпотентен (важно для ретраев нагрузочного теста):
+  - payload == сохранённый **оригинал** → это повтор прямого шага (маскирования): возвращается
+    **сохранённая маска** — ретраи не портят метрику маскирования.
+  - payload == сохранённая **маска** → это обратный шаг (демаскирования): возвращается
+    `store.Entry.Original`, т.е. исходная строка **байт-в-байт**, включая не-ПД подстроки.
 - Ответ всегда `{"result": "..."}`.
 
 Коды: `200` — успех, `400` — нет `payload_id`/битый JSON и битый `payload`, `401` —

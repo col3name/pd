@@ -107,11 +107,24 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 		allowUnmask = system.AllowUnmask
 	}
 	if allowUnmask {
+		// A payload_id is reusable: the direct check may be retried (the load
+		// tester re-sends the same payload after a timeout) and the reverse
+		// check re-sends our masked result. Distinguish by matching payload:
+		//   payload == Original -> direct check retry -> return the saved mask
+		//   payload == Masked   -> reverse check     -> return the original
 		if e, ok, err := h.Store.Get(r.Context(), req.PayloadID); err == nil && ok {
-			writeResult(w, ProcessResponse{Result: e.Original})
-			observability.RequestLatency.WithLabelValues("unmask").Observe(time.Since(start).Seconds())
-			slog.Info("process: unmasked", "payload_id", req.PayloadID, "system", req.System, "latency_ms", time.Since(start).Milliseconds())
-			return
+			if e.Masked != "" && req.Payload == e.Original {
+				writeResult(w, ProcessResponse{Result: e.Masked})
+				observability.RequestLatency.WithLabelValues("mask").Observe(time.Since(start).Seconds())
+				slog.Info("process: mask retry served", "payload_id", req.PayloadID, "system", req.System, "latency_ms", time.Since(start).Milliseconds())
+				return
+			}
+			if req.Payload == e.Masked {
+				writeResult(w, ProcessResponse{Result: e.Original})
+				observability.RequestLatency.WithLabelValues("unmask").Observe(time.Since(start).Seconds())
+				slog.Info("process: unmasked", "payload_id", req.PayloadID, "system", req.System, "latency_ms", time.Since(start).Milliseconds())
+				return
+			}
 		}
 	}
 	p, ok := h.systemPipeline(req.System)
@@ -123,7 +136,7 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 	for _, t := range res.Types {
 		observability.DetectedTotal.WithLabelValues(t).Inc()
 	}
-	if err := h.Store.Save(r.Context(), req.PayloadID, store.Entry{Original: req.Payload, Tokens: res.Tokens}); err != nil {
+	if err := h.Store.Save(r.Context(), req.PayloadID, store.Entry{Original: req.Payload, Masked: res.Masked, Tokens: res.Tokens}); err != nil {
 		slog.Warn("process: store save failed", "payload_id", req.PayloadID, "error", err)
 	}
 	writeResult(w, ProcessResponse{Result: res.Masked})
