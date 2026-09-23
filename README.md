@@ -12,15 +12,15 @@
 
 | Сервис | URL |
 |--------|-----|
-| **Web / Админка (SPA)** | `http://<host>:5173/` |
-| **API (PII Gateway)** | `http://<host>:5173/process` |
-| Swagger UI | `http://<host>:5173/docs` |
-| OpenAPI-спецификация | `http://<host>:5173/openapi.yaml` |
-| Health-check | `http://<host>:5173/health` |
-| Prometheus-метрики | `http://<host>:5173/metrics` |
-| Prometheus UI | `http://<host>:9090` |
-| Grafana | `http://<host>:3000` (admin/admin) |
-| Grafana-дашборд «PII Gateway» | `http://<host>:3000/d/pii-gateway/pii-gateway` |
+| **Web / Админка (SPA)** | `http://5.42.118.103:5173/` |
+| **API (PII Gateway)** | `http://5.42.118.103:5173/process` |
+| Swagger UI | `http://5.42.118.103:5173/docs` |
+| OpenAPI-спецификация | `http://5.42.118.103:5173/openapi.yaml` |
+| Health-check | `http://5.42.118.103:5173/health` |
+| Prometheus-метрики | `http://5.42.118.103:5173/metrics` |
+| Prometheus UI | `http://5.42.118.103:9090` |
+| Grafana | `http://5.42.118.103:3000` (admin/admin) |
+| Grafana-дашборд «PII Gateway» | `http://5.42.118.103:3000/d/pii-gateway/pii-gateway` |
 
 ## Архитектура
 
@@ -55,18 +55,18 @@ LLM, а затем демаскирует ответ по сохранённой
 
 | URL | Назначение |
 |-----|------------|
-| `http://<host>:5173/` | Админка (SPA) — список команд, детальные настройки |
-| `http://<host>:5173/process` | POST — маскирование/демаскирование |
-| `http://<host>:5173/v1/systems` | Управление системами (Bearer-токен) |
-| `http://<host>:5173/v1/config` | Read-only конфигурация |
-| `http://<host>:5173/v1/auth/login` | Вход в админку |
-| `http://<host>:5173/health` | Health-check → `ok` |
-| `http://<host>:5173/metrics` | Prometheus-метрики |
-| `http://<host>:5173/docs` | Swagger UI (Try it out) |
-| `http://<host>:5173/openapi.yaml` | OpenAPI-спецификация |
-| `http://<host>:9090` | Prometheus (отдельный порт) |
-| `http://<host>:3000` | Grafana (admin/admin) |
-| `http://<host>:3000/d/pii-gateway/pii-gateway` | Дашборд «PII Gateway» (RPS, latency, PII, Go runtime) |
+| `http://5.42.118.103:5173/` | Админка (SPA) — список команд, детальные настройки |
+| `http://5.42.118.103:5173/process` | POST — маскирование/демаскирование |
+| `http://5.42.118.103:5173/v1/systems` | Управление системами (Bearer-токен) |
+| `http://5.42.118.103:5173/v1/config` | Read-only конфигурация |
+| `http://5.42.118.103:5173/v1/auth/login` | Вход в админку |
+| `http://5.42.118.103:5173/health` | Health-check → `ok` |
+| `http://5.42.118.103:5173/metrics` | Prometheus-метрики |
+| `http://5.42.118.103:5173/docs` | Swagger UI (Try it out) |
+| `http://5.42.118.103:5173/openapi.yaml` | OpenAPI-спецификация |
+| `http://5.42.118.103:9090` | Prometheus (отдельный порт) |
+| `http://5.42.118.103:3000` | Grafana (admin/admin) |
+| `http://5.42.118.103:3000/d/pii-gateway/pii-gateway` | Дашборд «PII Gateway» (RPS, latency, PII, Go runtime) |
 
 ## Демо для жюри
 
@@ -468,9 +468,9 @@ curl -s -X POST http://localhost:5173/process \
 | `pii_detected_total{type}` | Counter | Обнаружено ПД по типам |
 
 **Доступ:**
-- Сырые метрики: `http://<host>:5173/metrics` (Prometheus-формат).
-- Prometheus UI: `http://<host>:9090` (скрейпит `pii-module-v2:8080/metrics`).
-- Grafana: `http://<host>:3000` (admin/admin) — дашборд «PII Gateway»
+- Сырые метрики: `http://5.42.118.103:5173/metrics` (Prometheus-формат).
+- Prometheus UI: `http://5.42.118.103:9090` (скрейпит `pii-module-v2:8080/metrics`).
+- Grafana: `http://5.42.118.103:3000` (admin/admin) — дашборд «PII Gateway»
   (`/d/pii-gateway/pii-gateway`) с панелями RPS, latency P95, ошибки,
   mask/unmask, PII по типам, Go runtime (heap, goroutines, GC).
 
