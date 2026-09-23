@@ -21,10 +21,11 @@ RUN if [ "$WITH_NER" = "1" ]; then \
 FROM alpine:3.20
 RUN adduser -D -u 10001 app
 WORKDIR /srv
+# Create the log dir as root, then chown to app so the server can write logs.
+RUN mkdir -p /srv/logs && chown app:app /srv/logs
 USER app
 COPY --from=builder /out/server /server
 COPY configs ./configs
-RUN mkdir -p /srv/logs
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s \
   CMD wget -qO- http://localhost:8080/health || exit 1
