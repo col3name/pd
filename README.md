@@ -243,6 +243,11 @@ curl -X POST http://localhost:5173/process \
 ./scripts/curl_demo.sh http://localhost:5173
 ```
 
+**Примеры готовых запросов** — в `./scripts/curl_demo.sh` (15 шагов):
+health, маскирование/демаскирование, системы `chat`/`analytics` с API-ключами,
+ошибки 401/403/404/400, ловушки (Пушкин, отделение банка, дата открытия, VIN),
+метрики и Swagger. Каждый шаг — готовый `curl` с комментарием, что ожидать.
+
 ## Контракт API
 
 ### `POST /process`
