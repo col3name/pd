@@ -126,6 +126,14 @@ func main() {
 	h.Pool = pool
 	defer pool.Close()
 
+	var layeredStore *store.LayeredStore
+	if ls, ok := st.(*store.LayeredStore); ok {
+		layeredStore = ls
+	}
+	reporterCtx, stopReporter := context.WithCancel(context.Background())
+	defer stopReporter()
+	observability.StartReporter(reporterCtx, pool, layeredStore, time.Duration(cfg.Autoscale.PollSeconds)*time.Second)
+
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
