@@ -74,6 +74,7 @@ func (r *Repo) migrate(ctx context.Context) error {
 			login      text NOT NULL REFERENCES admins(login),
 			expires_at timestamptz NOT NULL
 		)`,
+		`ALTER TABLE systems ADD COLUMN IF NOT EXISTS require_key boolean NOT NULL DEFAULT false`,
 	}
 	for _, s := range stmts {
 		if _, err := r.pool.Exec(ctx, s); err != nil {
