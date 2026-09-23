@@ -47,10 +47,12 @@ export interface UpdateSystemBody {
   pii?: string[];
 }
 
-let token = '';
+let token = localStorage.getItem('pii_admin_token') ?? '';
 
 export function setToken(t: string) {
   token = t;
+  if (t) localStorage.setItem('pii_admin_token', t);
+  else localStorage.removeItem('pii_admin_token');
 }
 
 export function getToken() {

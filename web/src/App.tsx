@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button, Cell, List, Section } from '@telegram-apps/telegram-ui';
 import LoginScreen from './LoginScreen';
+import SystemsTab from './SystemsTab';
 import { getToken, setToken, api } from './api';
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
         </List>
       </Section>
       <div>Системы (Task 8)</div>
+      <SystemsTab />
       <Button onClick={async () => { try { await api.logout(); } finally { setToken(''); setAuthed(false); } }}>
         Выйти
       </Button>
