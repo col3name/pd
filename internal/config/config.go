@@ -98,7 +98,7 @@ type SystemConfig struct {
 	APIKey      string          `yaml:"api_key"` // non-empty => require X-API-Key
 	Enabled     bool            `yaml:"enabled"` // false => system rejected (403)
 	PII         []detector.Type `yaml:"pii"`     // empty => all supported types
-	Masking     string          `yaml:"masking"` // "redact" | "token"; empty => global
+	Masking     string          `yaml:"masking"` // "redact" | "token" | "synthetic"; empty => global
 	AllowUnmask bool            `yaml:"allow_unmask"`
 	RequireKey  bool            `yaml:"require_key"` // true => /process requires a valid key
 }

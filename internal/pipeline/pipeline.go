@@ -111,6 +111,8 @@ func (p *Pipeline) Process(text string) Result {
 	var tokens map[string]string
 	if p.opts.Mode == "token" {
 		masked, tokens = masker.Tokenize(text, kept)
+	} else if p.opts.Mode == "synthetic" {
+		masked = masker.Synthetic(text, kept)
 	} else {
 		masked = masker.Mask(text, kept)
 	}

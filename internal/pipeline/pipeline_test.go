@@ -74,6 +74,15 @@ func TestPipelineLonePINNotMasked(t *testing.T) {
 	require.NotContains(t, res.Masked, "[ПИН]")
 }
 
+func TestPipelineSyntheticMode(t *testing.T) {
+	text := "Клиент Иванов Иван Иванович, тел +7 999 123-45-67"
+	res := newPipeline("synthetic").Process(text)
+	require.NotContains(t, res.Masked, "[ФИО]")
+	require.NotContains(t, res.Masked, "[ТЕЛЕФОН]")
+	require.NotEqual(t, text, res.Masked)
+	require.Contains(t, res.Masked, "Клиент")
+}
+
 func TestPipelineTokenModeRoundTrip(t *testing.T) {
 	orig := "Клиент Иванов Иван Иванович, паспорт 4509 123456"
 	res := newPipeline("token").Process(orig)
