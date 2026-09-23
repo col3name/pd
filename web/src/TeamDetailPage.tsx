@@ -66,12 +66,12 @@ export default function TeamDetailPage() {
   const hasRealKey = !!newKey;
   const accessKey = newKey || (team.api_key_set ? '••••••••••••••••••••••••••••••••' : '');
 
-  const curlMask = `curl -s -X POST http://localhost:8080/process \\
+  const curlMask = `curl -s -X POST http://5.42.118.103:5173/process \\
   -H "X-API-Key: ${accessKey}" \\
   -H 'Content-Type: application/json' \\
   -d '{"payload":"паспорт 4509 123456","payload_id":"demo1","system":"${team.name}"}'`;
 
-  const fetchMask = `fetch('http://localhost:8080/process', {
+  const fetchMask = `fetch('http://5.42.118.103:5173/process', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', 'X-API-Key': '${accessKey}' },
   body: JSON.stringify({ payload: 'паспорт 4509 123456', payload_id: 'demo1', system: '${team.name}' })

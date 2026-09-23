@@ -41,31 +41,31 @@ export default function HomePage() {
 
       <Section header="Примеры запросов">
         <Cell subtitle="curl — маскирование (новый payload_id)">
-          <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{`curl -s -X POST /process \\
+          <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{`curl -s -X POST http://5.42.118.103:5173/process \\
   -H 'Content-Type: application/json' \\
   -d '{"payload":"паспорт 4509 123456","payload_id":"demo1"}'`}</pre>
         </Cell>
         <Cell subtitle="curl — демаскирование (тот же payload_id, payload = маска)">
-          <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{`curl -s -X POST /process \\
+          <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{`curl -s -X POST http://5.42.118.103:5173/process \\
   -H 'Content-Type: application/json' \\
   -d '{"payload":"паспорт [ПАСПОРТ]","payload_id":"demo1"}'`}</pre>
         </Cell>
         <Cell subtitle="fetch — маскирование">
-          <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{`fetch('/process', {
+          <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{`fetch('http://5.42.118.103:5173/process', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ payload: 'паспорт 4509 123456', payload_id: 'demo1' })
 })`}</pre>
         </Cell>
         <Cell subtitle="fetch — демаскирование">
-          <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{`fetch('/process', {
+          <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{`fetch('http://5.42.118.103:5173/process', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ payload: 'паспорт [ПАСПОРТ]', payload_id: 'demo1' })
 })`}</pre>
         </Cell>
         <Cell subtitle="с access key (X-API-Key) — маскирование">
-          <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{`curl -s -X POST /process \\
+          <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{`curl -s -X POST http://5.42.118.103:5173/process \\
   -H 'Content-Type: application/json' \\
   -H 'X-API-Key: <access_key>' \\
   -d '{"payload":"паспорт 4509 123456","payload_id":"demo1","system":"chat"}'`}</pre>
