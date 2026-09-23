@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/kind-earthquake/pii-module/internal/config"
+	"github.com/kind-earthquake/pii-module/internal/control"
 	"github.com/kind-earthquake/pii-module/internal/observability"
 	"github.com/kind-earthquake/pii-module/internal/pipeline"
-	"github.com/kind-earthquake/pii-module/internal/ratelimit"
 	"github.com/kind-earthquake/pii-module/internal/store"
 )
 
@@ -25,52 +25,27 @@ type ProcessResponse struct {
 }
 
 type Handler struct {
-	Pipeline *pipeline.Pipeline
-	Store    store.Store
-	Cfg      *config.Config
-	Limiter  *ratelimit.Limiter
+	Mgr *control.Manager
 }
 
 // systemPipeline returns the per-system pipeline. The second return value is
 // true when the system resolves to a pipeline (enabled and known).
 func (h *Handler) systemPipeline(name string) (*pipeline.Pipeline, bool) {
 	if name == "" {
-		return h.Pipeline, true
+		return h.Mgr.Pipeline(""), true
 	}
-	for i := range h.Cfg.Systems {
-		s := &h.Cfg.Systems[i]
-		if s.Name != name {
-			continue
-		}
-		if !s.Enabled {
-			return nil, false
-		}
-		mode := s.Masking
-		if mode == "" {
-			mode = h.Cfg.Masking.Mode
-		}
-		return pipeline.New(
-			h.Pipeline.Detector(),
-			h.Pipeline.Context(),
-			h.Pipeline.Whitelist(),
-			h.Pipeline.Priority(),
-			pipeline.Options{
-				Mode:            mode,
-				Sensitive:       h.Cfg.SensitiveTypes,
-				ProximityWindow: h.Pipeline.ProximityWindow(),
-				Gate:            h.Pipeline.Gate(),
-				AllowedTypes:    s.PII,
-			},
-		), true
+	s := h.Mgr.System(name)
+	if s == nil || !s.Enabled {
+		return nil, false
 	}
-	return h.Pipeline, true
+	return h.Mgr.Pipeline(name), true
 }
 
 // Process handles masking (new payload_id) and unmasking (existing payload_id).
 func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	if h.Limiter != nil {
-		if ok, retryAfter := h.Limiter.Allow(); !ok {
+	if lim := h.Mgr.Limiter(); lim != nil {
+		if ok, retryAfter := lim.Allow(); !ok {
 			w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
 			observability.RequestsTotal.WithLabelValues("mask", "429").Inc()
@@ -102,7 +77,7 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowUnmask := h.Cfg.AllowUnmask
+	allowUnmask := h.Mgr.Config().AllowUnmask
 	if system != nil {
 		allowUnmask = system.AllowUnmask
 	}
@@ -112,7 +87,7 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 		// check re-sends our masked result. Distinguish by matching payload:
 		//   payload == Original -> direct check retry -> return the saved mask
 		//   payload == Masked   -> reverse check     -> return the original
-		if e, ok, err := h.Store.Get(r.Context(), req.PayloadID); err == nil && ok {
+		if e, ok, err := h.Mgr.Store().Get(r.Context(), req.PayloadID); err == nil && ok {
 			if e.Masked != "" && req.Payload == e.Original {
 				writeResult(w, ProcessResponse{Result: e.Masked})
 				observability.RequestLatency.WithLabelValues("mask").Observe(time.Since(start).Seconds())
@@ -136,7 +111,7 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 	for _, t := range res.Types {
 		observability.DetectedTotal.WithLabelValues(t).Inc()
 	}
-	if err := h.Store.Save(r.Context(), req.PayloadID, store.Entry{Original: req.Payload, Masked: res.Masked, Tokens: res.Tokens}); err != nil {
+	if err := h.Mgr.Store().Save(r.Context(), req.PayloadID, store.Entry{Original: req.Payload, Masked: res.Masked, Tokens: res.Tokens}); err != nil {
 		slog.Warn("process: store save failed", "payload_id", req.PayloadID, "error", err)
 	}
 	writeResult(w, ProcessResponse{Result: res.Masked})
@@ -146,15 +121,7 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 
 // systemConfig looks up a consumer system by name (nil if absent).
 func (h *Handler) systemConfig(name string) *config.SystemConfig {
-	if name == "" {
-		return nil
-	}
-	for i := range h.Cfg.Systems {
-		if h.Cfg.Systems[i].Name == name {
-			return &h.Cfg.Systems[i]
-		}
-	}
-	return nil
+	return h.Mgr.System(name)
 }
 
 // authorize enforces the per-system API key via the X-API-Key header. Systems

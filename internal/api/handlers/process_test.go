@@ -13,30 +13,20 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kind-earthquake/pii-module/internal/config"
-	"github.com/kind-earthquake/pii-module/internal/context"
+	"github.com/kind-earthquake/pii-module/internal/control"
 	"github.com/kind-earthquake/pii-module/internal/detector"
-	"github.com/kind-earthquake/pii-module/internal/pipeline"
-	"github.com/kind-earthquake/pii-module/internal/ratelimit"
-	"github.com/kind-earthquake/pii-module/internal/resolve"
 	"github.com/kind-earthquake/pii-module/internal/store"
-	"github.com/kind-earthquake/pii-module/internal/whitelist"
 )
 
-func newTestHandler(t *testing.T) *Handler {
+func newTestHandler(t *testing.T, mutate ...func(*config.Config)) *Handler {
 	t.Helper()
 	cfg := config.Default()
-	p := pipeline.New(
-		detector.New(detector.StructuredRules()),
-		context.New(context.DefaultBoost, context.DefaultPenalty),
-		whitelist.New(cfg.Whitelist.Persons, cfg.Whitelist.Addresses, cfg.Whitelist.Organizations),
-		resolve.DefaultPriority,
-		pipeline.Options{Mode: cfg.Masking.Mode, Sensitive: cfg.SensitiveTypes},
-	)
-	return &Handler{
-		Pipeline: p,
-		Store:    store.NewMemory(time.Hour, 1000),
-		Cfg:      cfg,
+	for _, fn := range mutate {
+		fn(cfg)
 	}
+	m, err := control.New(control.WithConfig(cfg), control.WithStore(store.NewMemory(time.Hour, 1000)))
+	require.NoError(t, err)
+	return &Handler{Mgr: m}
 }
 
 func doProcess(t *testing.T, h *Handler, payload, id string) *httptest.ResponseRecorder {
@@ -81,17 +71,7 @@ func TestProcessMaskRetryReturnsSameMask(t *testing.T) {
 }
 
 func TestProcessTokenModeMasksAndUnmasks(t *testing.T) {
-	h := newTestHandler(t)
-	// The pipeline captures the masking mode at construction, so rebuild it in
-	// token mode against the same store/config.
-	h.Cfg.Masking.Mode = "token"
-	h.Pipeline = pipeline.New(
-		detector.New(detector.StructuredRules()),
-		context.New(context.DefaultBoost, context.DefaultPenalty),
-		whitelist.New(h.Cfg.Whitelist.Persons, h.Cfg.Whitelist.Addresses, h.Cfg.Whitelist.Organizations),
-		resolve.DefaultPriority,
-		pipeline.Options{Mode: h.Cfg.Masking.Mode, Sensitive: h.Cfg.SensitiveTypes},
-	)
+	h := newTestHandler(t, func(c *config.Config) { c.Masking.Mode = "token" })
 	rec := doProcess(t, h, "Клиент Иванов Иван Иванович, паспорт 4509 123456", "tok-1")
 	require.Equal(t, http.StatusOK, rec.Code)
 	var resp ProcessResponse
@@ -132,12 +112,16 @@ func TestProcessUnmaskUnknownID(t *testing.T) {
 }
 
 func TestProcessRedisDown(t *testing.T) {
-	h := newTestHandler(t)
 	// Break the store by pointing at a closed miniredis: store failure on the
 	// unmask lookup falls back to the mask path.
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	h.Store = store.NewRedis(client, time.Hour)
+	m, err := control.New(
+		control.WithConfig(config.Default()),
+		control.WithStore(store.NewRedis(client, time.Hour)),
+	)
+	require.NoError(t, err)
+	h := &Handler{Mgr: m}
 	mr.Close()
 	rec := doProcess(t, h, "паспорт 4509 123456", "id-3")
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -147,8 +131,9 @@ func TestProcessRedisDown(t *testing.T) {
 }
 
 func TestProcessSensitiveCooccurrence(t *testing.T) {
-	h := newTestHandler(t)
-	h.Cfg.SensitiveTypes = []detector.Type{detector.TypePIN, detector.TypeCVV}
+	h := newTestHandler(t, func(c *config.Config) {
+		c.SensitiveTypes = []detector.Type{detector.TypePIN, detector.TypeCVV}
+	})
 
 	// Lone PIN is not masked (co-occurrence rule).
 	rec := doProcess(t, h, "пин 1234", "co-1")
@@ -167,9 +152,10 @@ func TestProcessSensitiveCooccurrence(t *testing.T) {
 }
 
 func TestProcessRateLimit(t *testing.T) {
-	h := newTestHandler(t)
 	// Allow only 2 requests, then reject.
-	h.Limiter = ratelimit.New(2, 2)
+	h := newTestHandler(t, func(c *config.Config) {
+		c.RateLimit = config.RateLimitConfig{RPS: 2, Burst: 2}
+	})
 
 	rec1 := doProcess(t, h, "паспорт 4509 123456", "rl-1")
 	require.Equal(t, http.StatusOK, rec1.Code)
@@ -194,10 +180,11 @@ func doProcessSystem(t *testing.T, h *Handler, payload, id, system, apiKey strin
 }
 
 func TestProcessSystemAllowlistTypes(t *testing.T) {
-	h := newTestHandler(t)
-	h.Cfg.Systems = []config.SystemConfig{
-		{Name: "analytics", Enabled: true, PII: []detector.Type{detector.TypePhone, detector.TypeEmail}, AllowUnmask: false},
-	}
+	h := newTestHandler(t, func(c *config.Config) {
+		c.Systems = []config.SystemConfig{
+			{Name: "analytics", Enabled: true, PII: []detector.Type{detector.TypePhone, detector.TypeEmail}, AllowUnmask: false},
+		}
+	})
 
 	rec := doProcessSystem(t, h, "Клиент Иванов Иван, тел +7 912 345-67-89, email ivanov@test.ru, паспорт 4509 123456", "sys-1", "analytics", "")
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -211,10 +198,11 @@ func TestProcessSystemAllowlistTypes(t *testing.T) {
 }
 
 func TestProcessSystemNoUnmask(t *testing.T) {
-	h := newTestHandler(t)
-	h.Cfg.Systems = []config.SystemConfig{
-		{Name: "analytics", Enabled: true, AllowUnmask: false},
-	}
+	h := newTestHandler(t, func(c *config.Config) {
+		c.Systems = []config.SystemConfig{
+			{Name: "analytics", Enabled: true, AllowUnmask: false},
+		}
+	})
 
 	// Маскируем.
 	rec := doProcessSystem(t, h, "паспорт 4509 123456", "sys-2", "analytics", "")
@@ -232,28 +220,31 @@ func TestProcessSystemNoUnmask(t *testing.T) {
 }
 
 func TestProcessSystemDisabled(t *testing.T) {
-	h := newTestHandler(t)
-	h.Cfg.Systems = []config.SystemConfig{
-		{Name: "down", Enabled: false},
-	}
+	h := newTestHandler(t, func(c *config.Config) {
+		c.Systems = []config.SystemConfig{
+			{Name: "down", Enabled: false},
+		}
+	})
 	rec := doProcessSystem(t, h, "паспорт 4509 123456", "sys-3", "down", "")
 	require.Equal(t, http.StatusForbidden, rec.Code)
 }
 
 func TestProcessSystemUnknown(t *testing.T) {
-	h := newTestHandler(t)
-	h.Cfg.Systems = []config.SystemConfig{
-		{Name: "chat", Enabled: true},
-	}
+	h := newTestHandler(t, func(c *config.Config) {
+		c.Systems = []config.SystemConfig{
+			{Name: "chat", Enabled: true},
+		}
+	})
 	rec := doProcessSystem(t, h, "паспорт 4509 123456", "sys-4", "nope", "")
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }
 
 func TestProcessSystemAPIKey(t *testing.T) {
-	h := newTestHandler(t)
-	h.Cfg.Systems = []config.SystemConfig{
-		{Name: "chat", Enabled: true, APIKey: "sekret", AllowUnmask: true},
-	}
+	h := newTestHandler(t, func(c *config.Config) {
+		c.Systems = []config.SystemConfig{
+			{Name: "chat", Enabled: true, APIKey: "sekret", AllowUnmask: true},
+		}
+	})
 
 	// Без ключа -> 401.
 	rec := doProcessSystem(t, h, "паспорт 4509 123456", "sys-5", "chat", "")

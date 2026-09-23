@@ -18,17 +18,14 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/redis/go-redis/v9"
 
+	openapi "github.com/kind-earthquake/pii-module"
 	"github.com/kind-earthquake/pii-module/internal/api/handlers"
 	"github.com/kind-earthquake/pii-module/internal/config"
-	pcontext "github.com/kind-earthquake/pii-module/internal/context"
+	"github.com/kind-earthquake/pii-module/internal/control"
 	"github.com/kind-earthquake/pii-module/internal/detector"
 	"github.com/kind-earthquake/pii-module/internal/ner"
 	"github.com/kind-earthquake/pii-module/internal/observability"
-	"github.com/kind-earthquake/pii-module/internal/pipeline"
-	"github.com/kind-earthquake/pii-module/internal/ratelimit"
 	"github.com/kind-earthquake/pii-module/internal/store"
-	"github.com/kind-earthquake/pii-module/internal/whitelist"
-	openapi "github.com/kind-earthquake/pii-module"
 )
 
 func main() {
@@ -51,18 +48,6 @@ func main() {
 		st = store.NewMemory(ttl, cfg.Store.Capacity)
 	}
 
-	var ctxR *pcontext.Resolver
-	if cfg.Context.Enabled {
-		ctxR = pcontext.New(cfg.Context.Boost, cfg.Context.Penalty)
-	} else {
-		ctxR = pcontext.New(nil, nil)
-	}
-
-	var w *whitelist.Whitelist
-	if cfg.Whitelist.Enabled {
-		w = whitelist.New(cfg.Whitelist.Persons, cfg.Whitelist.Addresses, cfg.Whitelist.Organizations)
-	}
-
 	detectorOpts := []detector.Option{}
 	var nerModel *ner.Model
 	if cfg.ML.Enabled && cfg.ML.ModelPath != "" && cfg.ML.VocabPath != "" {
@@ -80,27 +65,16 @@ func main() {
 		}
 	}
 
-	p := pipeline.New(
-		detector.New(detector.StructuredRules(), detectorOpts...),
-		ctxR,
-		w,
-		cfg.Resolve.Priority,
-		pipeline.Options{
-			Mode:      cfg.Masking.Mode,
-			Sensitive: cfg.SensitiveTypes,
-		},
+	mgr, err := control.New(
+		control.WithConfig(cfg),
+		control.WithStore(st),
+		control.WithDetectorOpts(detectorOpts...),
 	)
-
-	h := &handlers.Handler{
-		Pipeline: p,
-		Store:    st,
-		Cfg:      cfg,
+	if err != nil {
+		slog.Error("failed to build pipeline", "error", err)
+		os.Exit(1)
 	}
-	// Rate limiter: enabled only when rps > 0.
-	if cfg.RateLimit.RPS > 0 {
-		h.Limiter = ratelimit.New(cfg.RateLimit.RPS, cfg.RateLimit.Burst)
-		slog.Info("rate limiting enabled", "rps", cfg.RateLimit.RPS, "burst", cfg.RateLimit.Burst)
-	}
+	h := &handlers.Handler{Mgr: mgr}
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -109,7 +83,13 @@ func main() {
 		_, _ = w.Write([]byte("ok"))
 	})
 	r.Handle("/metrics", observability.Handler())
-	r.Post("/process", h.Process)
+	r.Route("/v1", func(r chi.Router) {
+		r.Use(handlers.CORS(adminOrigin()))
+		r.Get("/config", h.GetConfig)
+		r.Put("/config", h.PutConfig)
+		r.Get("/config/rules", h.GetConfigRules)
+	})
+	r.With(handlers.CORS(adminOrigin())).Post("/process", h.Process)
 	// OpenAPI: сама спецификация + интерактивный Swagger UI (Try it out).
 	r.Get("/openapi.yaml", openapi.SpecHandler())
 	r.Get("/process_api.yaml", openapi.SpecHandler())
@@ -147,6 +127,16 @@ func main() {
 	if nerModel != nil {
 		_ = nerModel.Close()
 	}
+}
+
+// adminOrigin returns the CORS allow-origin for the admin/config endpoints
+// (ADMIN_ORIGIN env, default "*").
+func adminOrigin() string {
+	origin := os.Getenv("ADMIN_ORIGIN")
+	if origin == "" {
+		return "*"
+	}
+	return origin
 }
 
 // redisOptions converts a redis URL (redis://host:port/db) into redis.Options,
