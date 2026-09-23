@@ -17,6 +17,7 @@ type systemView struct {
 	Enabled     bool            `json:"enabled"`
 	Masking     string          `json:"masking"`
 	AllowUnmask bool            `json:"allow_unmask"`
+	RequireKey  bool            `json:"require_key"`
 	PII         []detector.Type `json:"pii"`
 }
 
@@ -27,6 +28,7 @@ func toView(s config.SystemConfig) systemView {
 		Enabled:     s.Enabled,
 		Masking:     s.Masking,
 		AllowUnmask: s.AllowUnmask,
+		RequireKey:  s.RequireKey,
 		PII:         s.PII,
 	}
 }
@@ -51,6 +53,7 @@ func (h *Handler) CreateSystem(w http.ResponseWriter, r *http.Request) {
 		Name        string          `json:"name"`
 		Enabled     *bool           `json:"enabled"`
 		AllowUnmask *bool           `json:"allow_unmask"`
+		RequireKey  *bool           `json:"require_key"`
 		Masking     string          `json:"masking"`
 		PII         []detector.Type `json:"pii"`
 	}
@@ -68,6 +71,7 @@ func (h *Handler) CreateSystem(w http.ResponseWriter, r *http.Request) {
 		APIKey:      HashKey(key),
 		Enabled:     derefBool(in.Enabled, true),
 		AllowUnmask: derefBool(in.AllowUnmask, false),
+		RequireKey:  derefBool(in.RequireKey, false),
 		Masking:     in.Masking,
 		PII:         in.PII,
 	}
@@ -99,6 +103,7 @@ func (h *Handler) UpdateSystem(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Enabled     *bool           `json:"enabled"`
 		AllowUnmask *bool           `json:"allow_unmask"`
+		RequireKey  *bool           `json:"require_key"`
 		Masking     *string         `json:"masking"`
 		PII         []detector.Type `json:"pii"`
 	}
@@ -116,6 +121,9 @@ func (h *Handler) UpdateSystem(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.AllowUnmask != nil {
 		cur.AllowUnmask = *in.AllowUnmask
+	}
+	if in.RequireKey != nil {
+		cur.RequireKey = *in.RequireKey
 	}
 	if in.Masking != nil {
 		cur.Masking = *in.Masking
