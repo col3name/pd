@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Cell, Checkbox, List, Section, Switch } from '@telegram-apps/telegram-ui';
@@ -11,6 +11,13 @@ export default function TeamDetailPage() {
   const { data: teams, isLoading } = useQuery<SystemInfo[]>({ queryKey: ['systems'], queryFn: api.listSystems });
   const { data: cfg } = useQuery<ConfigView>({ queryKey: ['config'], queryFn: api.getConfig });
   const [newKey, setNewKey] = useState('');
+  const [toast, setToast] = useState('');
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(''), 2000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const team = (teams ?? []).find((t) => t.name === name);
   const knownTypes = cfg?.known_types ?? [];
@@ -34,7 +41,10 @@ export default function TeamDetailPage() {
   if (isLoading) return <div>Загрузка…</div>;
   if (!team) return <div>Команда не найдена</div>;
 
-  const copy = (v: string) => navigator.clipboard?.writeText(v);
+  const copy = (v: string) => {
+    navigator.clipboard?.writeText(v);
+    setToast('Скопировано в буфер обмена');
+  };
 
   const enabledSet = new Set(team.pii ?? []);
   const allEnabled = (team.pii ?? []).length === 0;
@@ -153,6 +163,24 @@ export default function TeamDetailPage() {
 
       {(update.isError || regen.isError || remove.isError) && (
         <div style={{ color: 'red' }}>Ошибка: {String(update.error || regen.error || remove.error)}</div>
+      )}
+
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          bottom: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.85)',
+          color: '#fff',
+          padding: '10px 18px',
+          borderRadius: 8,
+          fontSize: 14,
+          zIndex: 1000,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+        }}>
+          {toast}
+        </div>
       )}
     </Section>
   );
