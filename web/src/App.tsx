@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Button, Cell, List, Section } from '@telegram-apps/telegram-ui';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { Button } from '@telegram-apps/telegram-ui';
 import LoginScreen from './LoginScreen';
-import TeamsTab from './TeamsTab';
+import HomePage from './HomePage';
+import TeamDetailPage from './TeamDetailPage';
 import { getToken, setToken, api } from './api';
 
 export default function App() {
@@ -17,12 +19,12 @@ export default function App() {
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: 16 }}>
-      <Section header="PII Gateway — Админка">
-        <List>
-          <Cell subtitle="команды-потребители">Команды</Cell>
-        </List>
-      </Section>
-      <TeamsTab />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/teams/:name" element={<TeamDetailPage />} />
+        </Routes>
+      </BrowserRouter>
       <Button onClick={async () => { try { await api.logout(); } finally { setToken(''); setAuthed(false); } }}>
         Выйти
       </Button>
