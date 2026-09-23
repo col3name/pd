@@ -1,0 +1,73 @@
+version: "3.8"
+
+services:
+  pii:
+    image: pii-module-v2:latest
+    environment:
+      - PORT=8080
+      - DATABASE_DSN=postgres://pii:pii@postgres:5432/pii?sslmode=disable
+      - STORE=layered
+      - REDIS_URL=redis://redis:6379/0
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 5s
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    networks:
+      - pii-net
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    deploy:
+      replicas: 1
+    networks:
+      - pii-net
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=pii
+      - POSTGRES_PASSWORD=pii
+      - POSTGRES_DB=pii
+    deploy:
+      replicas: 1
+    networks:
+      - pii-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    deploy:
+      replicas: 1
+    networks:
+      - pii-net
+
+  autoscaler:
+    image: pii-autoscaler:latest
+    environment:
+      - PROM_URL=http://prometheus:9090
+      - SERVICE=pii
+      - MIN_REPLICAS=2
+      - MAX_REPLICAS=20
+      - CPU_UP=70
+      - CPU_DOWN=30
+      - QUEUE_UP=100
+      - LATENCY_P99_MS=100
+      - COOLDOWN_SECONDS=30
+      - POLL_SECONDS=10
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      replicas: 1
+    networks:
+      - pii-net
+
+networks:
+  pii-net:
+    driver: overlay

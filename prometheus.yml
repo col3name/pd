@@ -1,6 +1,7 @@
 global:
   scrape_interval: 5s
 scrape_configs:
-  - job_name: pii-module
+  - job_name: pii
     static_configs:
-      - targets: ["pii-module-v2:8080"]
+      - targets: ["pii:8080"]
+    metrics_path: /metrics
