@@ -23,15 +23,16 @@ jobs:
             ./scripts/setup_ner.sh --skip-runtime || true
             # Build with NER enabled and start with the NER config
             WITH_NER=1 CONFIG_FILE=./configs/config.ner.yaml docker compose up -d --build
-            # Wait for the backend to become healthy (retry up to ~60s)
+            # Wait for the backend to become healthy (retry up to ~60s).
+            # Check the backend directly on :8080 first, then via nginx on :5173.
             for i in $(seq 1 30); do
-              if curl -sf http://localhost:5173/health; then
-                echo "health OK"
+              if curl -sf http://localhost:8080/health; then
+                echo "backend health OK"
                 exit 0
               fi
-              echo "waiting for health... ($i/30)"
+              echo "waiting for backend health... ($i/30)"
               sleep 2
             done
-            echo "health check failed"
+            echo "backend health check failed; dumping logs"
             docker compose logs --tail=50 pii-module-v2 || true
             exit 1

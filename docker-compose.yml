@@ -15,6 +15,8 @@ services:
       context: .
       args:
         WITH_NER: "${WITH_NER:-0}"   # 1 => CGO build with ONNX Runtime (run scripts/setup_ner.sh first)
+    ports:
+      - "8080:8080"   # expose backend directly for health checks / diagnostics
     environment:
       DATABASE_DSN: "postgres://pii:pii@postgres:5432/pii?sslmode=disable"
       # NER: point to the mounted model + onnxruntime shared library.
