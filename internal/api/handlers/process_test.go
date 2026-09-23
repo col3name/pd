@@ -171,6 +171,35 @@ func TestProcessRedisDown(t *testing.T) {
 	require.Contains(t, resp.Result, "[ПАСПОРТ]")
 }
 
+func TestProcessLayeredRedisDown(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	redisStore := store.NewRedis(client, time.Hour)
+	local := store.NewMemory(time.Hour, 1000)
+	breaker := store.NewBreaker(1, time.Minute)
+	layered := store.NewLayered(redisStore, local, breaker)
+	m, err := control.New(control.WithConfig(config.Default()), control.WithStore(layered))
+	require.NoError(t, err)
+	h := &Handler{Mgr: m}
+	// Mask while Redis is up.
+	rec := doProcess(t, h, "паспорт 4509 123456", "deg-1")
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp ProcessResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Contains(t, resp.Result, "[ПАСПОРТ]")
+	// Kill Redis.
+	mr.Close()
+	// Unmask from local cache still works.
+	rec2 := doProcess(t, h, resp.Result, "deg-1")
+	require.Equal(t, http.StatusOK, rec2.Code)
+	var resp2 ProcessResponse
+	require.NoError(t, json.Unmarshal(rec2.Body.Bytes(), &resp2))
+	require.Equal(t, "паспорт 4509 123456", resp2.Result)
+	// Masking still works with Redis down.
+	rec3 := doProcess(t, h, "паспорт 4509 123456", "deg-2")
+	require.Equal(t, http.StatusOK, rec3.Code)
+}
+
 func TestProcessSensitiveCooccurrence(t *testing.T) {
 	h := newTestHandler(t, func(c *config.Config) {
 		c.SensitiveTypes = []detector.Type{detector.TypePIN, detector.TypeCVV}
