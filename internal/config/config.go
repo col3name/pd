@@ -149,6 +149,11 @@ func Load(path string) (*Config, error) {
 	return cfg, nil
 }
 
+// WriteMinimal writes a minimal valid config file for tests.
+func WriteMinimal(path string) error {
+	return os.WriteFile(path, []byte("port: 8080\n"), 0o644)
+}
+
 func applyEnv(cfg *Config) {
 	if v := os.Getenv("PORT"); v != "" {
 		var p int
