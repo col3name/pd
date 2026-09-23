@@ -91,3 +91,20 @@ POST /process
 - `cd web && npm run build` passes.
 - Manual: enable "Требовать access key" on a system, POST /process without a
   key → 401; with the correct key in `access_token` → 200.
+
+## Confirmed decisions (brainstorming 2026-09-23)
+
+- `access_token` in the body is the SAME system API key (sha256 vs `api_key_hash`),
+  just an alternative way to pass it. No separate token store.
+- Key priority: `X-API-Key` header wins; if absent, use body `access_token`.
+- By default `/process` is open to all (no key required) unless the admin
+  enables the "Требовать access key" flag.
+- If `require_key=true` and the system has no key → all requests 401 until a
+  key is generated.
+- Auth matrix:
+  - `require_key=true`, no system key → 401 always.
+  - `require_key=true`, key provided and valid → 200.
+  - `require_key=true`, key missing/invalid → 401.
+  - `require_key=false`, no key → 200 (open).
+  - `require_key=false`, valid key → 200.
+  - `require_key=false`, invalid key → 401 (a wrong key is still rejected).
