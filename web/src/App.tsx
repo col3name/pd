@@ -22,7 +22,6 @@ export default function App() {
           <Cell subtitle="системы-потребители">Системы</Cell>
         </List>
       </Section>
-      <div>Системы (Task 8)</div>
       <SystemsTab />
       <Button onClick={async () => { try { await api.logout(); } finally { setToken(''); setAuthed(false); } }}>
         Выйти
