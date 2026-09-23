@@ -9,6 +9,7 @@ import (
 
 	"github.com/kind-earthquake/pii-module/internal/config"
 	"github.com/kind-earthquake/pii-module/internal/control"
+	"github.com/kind-earthquake/pii-module/internal/db"
 	"github.com/kind-earthquake/pii-module/internal/observability"
 	"github.com/kind-earthquake/pii-module/internal/pipeline"
 	"github.com/kind-earthquake/pii-module/internal/store"
@@ -25,7 +26,8 @@ type ProcessResponse struct {
 }
 
 type Handler struct {
-	Mgr *control.Manager
+	Mgr  *control.Manager
+	Repo *db.Repo
 }
 
 // systemPipeline returns the per-system pipeline. The second return value is
@@ -133,7 +135,7 @@ func (h *Handler) authorize(r *http.Request, s *config.SystemConfig) error {
 	if s == nil || s.APIKey == "" {
 		return nil
 	}
-	if r.Header.Get("X-API-Key") == s.APIKey {
+	if HashKey(r.Header.Get("X-API-Key")) == s.APIKey {
 		return nil
 	}
 	return config.ErrUnauthorized

@@ -86,7 +86,6 @@ func main() {
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(handlers.CORS(adminOrigin()))
 		r.Get("/config", h.GetConfig)
-		r.Get("/config/rules", h.GetConfigRules)
 	})
 	r.Route("/process", func(r chi.Router) {
 		r.Use(handlers.CORS(adminOrigin()))

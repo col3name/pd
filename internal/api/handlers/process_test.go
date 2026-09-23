@@ -242,7 +242,7 @@ func TestProcessSystemUnknown(t *testing.T) {
 func TestProcessSystemAPIKey(t *testing.T) {
 	h := newTestHandler(t, func(c *config.Config) {
 		c.Systems = []config.SystemConfig{
-			{Name: "chat", Enabled: true, APIKey: "sekret", AllowUnmask: true},
+			{Name: "chat", Enabled: true, APIKey: HashKey("sekret"), AllowUnmask: true},
 		}
 	})
 

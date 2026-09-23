@@ -5,18 +5,7 @@ import (
 	"net/http"
 
 	"github.com/kind-earthquake/pii-module/internal/config"
-	"github.com/kind-earthquake/pii-module/internal/detector"
 )
-
-// systemView is the JSON view of a system (no API key value, only a flag).
-type systemView struct {
-	Name        string          `json:"name"`
-	APIKeySet   bool            `json:"api_key_set"`
-	Enabled     bool            `json:"enabled"`
-	Masking     string          `json:"masking"`
-	AllowUnmask bool            `json:"allow_unmask"`
-	PII         []detector.Type `json:"pii"`
-}
 
 // configView is the full config returned by GET /v1/config.
 type configView struct {
@@ -31,30 +20,24 @@ type configView struct {
 // GetConfig handles GET /v1/config.
 func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	cfg := h.Mgr.Config()
+	systems, err := h.Repo.ListSystems(r.Context())
+	if err != nil {
+		http.Error(w, "internal", http.StatusInternalServerError)
+		return
+	}
 	view := configView{
-		Rev:          h.Mgr.Rev(),
-		Masking:      cfg.Masking.Mode,
-		Rules:        cfg.Rules,
-		Combinations: cfg.Combinations,
-		KnownTypes:   h.Mgr.KnownTypes(),
+		Rev:        h.Mgr.Rev(),
+		Masking:    cfg.Masking.Mode,
+		KnownTypes: h.Mgr.KnownTypes(),
 	}
-	for i := range cfg.Systems {
-		s := &cfg.Systems[i]
-		view.Systems = append(view.Systems, systemView{
-			Name:        s.Name,
-			APIKeySet:   s.APIKey != "",
-			Enabled:     s.Enabled,
-			Masking:     s.Masking,
-			AllowUnmask: s.AllowUnmask,
-			PII:         s.PII,
-		})
+	for _, s := range systems {
+		view.Systems = append(view.Systems, toView(s))
 	}
+	rules, _ := h.Repo.ListRules(r.Context())
+	combos, _ := h.Repo.ListCombinations(r.Context())
+	view.Rules = rules
+	view.Combinations = combos
 	writeJSON(w, view)
-}
-
-// GetConfigRules handles GET /v1/config/rules.
-func (h *Handler) GetConfigRules(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string][]string{"types": h.Mgr.KnownTypes()})
 }
 
 // CORS returns middleware granting admin origin cross-origin access.
