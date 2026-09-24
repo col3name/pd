@@ -79,6 +79,7 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
     restart: unless-stopped
 
   grafana:
@@ -124,3 +125,5 @@ services:
 
 volumes:
   pgdata:
+  promdata:
+    name: pii-compose-prometheus-data
