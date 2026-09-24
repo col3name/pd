@@ -116,14 +116,14 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 				writeResult(w, ProcessResponse{Result: e.Masked})
 				observability.RequestsTotal.WithLabelValues("mask", "200").Inc()
 				observability.RequestLatency.WithLabelValues("mask").Observe(time.Since(start).Seconds())
-				slog.Info("process: mask retry served", "payload_id", req.PayloadID, "system", req.System, "latency_ms", time.Since(start).Milliseconds())
+				slog.Debug("process: mask retry served", "payload_id", req.PayloadID, "system", req.System, "latency_ms", time.Since(start).Milliseconds())
 				return
 			}
 			if req.Payload == e.Masked {
 				writeResult(w, ProcessResponse{Result: e.Original})
 				observability.RequestsTotal.WithLabelValues("unmask", "200").Inc()
 				observability.RequestLatency.WithLabelValues("unmask").Observe(time.Since(start).Seconds())
-				slog.Info("process: unmasked", "payload_id", req.PayloadID, "system", req.System, "latency_ms", time.Since(start).Milliseconds())
+				slog.Debug("process: unmasked", "payload_id", req.PayloadID, "system", req.System, "latency_ms", time.Since(start).Milliseconds())
 				return
 			}
 		} else if errors.Is(err, store.ErrRedisUnavailable) {
@@ -157,7 +157,7 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 	writeResult(w, ProcessResponse{Result: res.Masked})
 	observability.RequestsTotal.WithLabelValues("mask", "200").Inc()
 	observability.RequestLatency.WithLabelValues("mask").Observe(time.Since(start).Seconds())
-	slog.Info("process: masked", "payload_id", req.PayloadID, "system", req.System, "types", res.Types, "latency_ms", time.Since(start).Milliseconds())
+	slog.Debug("process: masked", "payload_id", req.PayloadID, "system", req.System, "types", res.Types, "latency_ms", time.Since(start).Milliseconds())
 }
 
 // looksLikeMasked reports whether the payload is a masked result (an unmask

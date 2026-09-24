@@ -2,6 +2,11 @@
 port: 8080
 allow_unmask: true
 log_file: "/srv/logs/pii-gateway.log"   # путь для логов (скачивание в админке); пусто = только stderr
+queue:
+  workers: 128
+  fast_capacity: 8192
+  heavy_capacity: 1024
+  heavy_threshold: 4096
 store:
   type: memory          # "memory" | "redis"
   ttl_hours: 24

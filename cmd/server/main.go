@@ -45,6 +45,9 @@ func main() {
 	// in addition to stderr. Empty log_file keeps stderr-only logging.
 	// If the file can't be opened (e.g. read-only volume), fall back to stderr
 	// instead of crashing — the server must stay up.
+	// The file is capped at maxLogBytes so a long run can't fill the disk
+	// (per-request logging at high RPS grows ~5MB/s uncapped).
+	const maxLogBytes = 50 << 20 // 50 MB
 	var logFile *os.File
 	if cfg.LogFile != "" {
 		logFile, err = os.OpenFile(cfg.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
@@ -52,7 +55,7 @@ func main() {
 			slog.Warn("failed to open log file; continuing with stderr only", "path", cfg.LogFile, "error", err)
 		} else {
 			defer logFile.Close()
-			multi := io.MultiWriter(os.Stderr, logFile)
+			multi := io.MultiWriter(os.Stderr, &rotatingWriter{f: logFile, max: maxLogBytes})
 			slog.SetDefault(slog.New(slog.NewJSONHandler(multi, nil)))
 		}
 	}
@@ -110,12 +113,15 @@ func main() {
 		}
 	}
 
-	mgr, err := control.New(
+	mgrOpts := []control.Option{
 		control.WithConfig(cfg),
 		control.WithStore(st),
 		control.WithDetectorOpts(detectorOpts...),
-		control.WithRepo(repo),
-	)
+	}
+	if repo != nil {
+		mgrOpts = append(mgrOpts, control.WithRepo(repo))
+	}
+	mgr, err := control.New(mgrOpts...)
 	if err != nil {
 		slog.Error("failed to build pipeline", "error", err)
 		os.Exit(1)
@@ -201,6 +207,22 @@ func main() {
 	if nerModel != nil {
 		_ = nerModel.Close()
 	}
+}
+
+// rotatingWriter truncates the underlying file once it exceeds max bytes, so
+// an unbounded log volume can never fill the disk.
+type rotatingWriter struct {
+	f   *os.File
+	max int64
+}
+
+func (w *rotatingWriter) Write(p []byte) (int, error) {
+	if st, err := w.f.Stat(); err == nil && st.Size()+int64(len(p)) > w.max {
+		if err := w.f.Truncate(0); err == nil {
+			_, _ = w.f.Seek(0, io.SeekStart)
+		}
+	}
+	return w.f.Write(p)
 }
 
 // adminOrigin returns the CORS allow-origin for the admin/config endpoints
